@@ -103,7 +103,17 @@
 						}
 					}
 
-					usort($array, create_function('$a, $b', 'return strcmp($a["timestamp"], $b["timestamp"]);'));
+                                        usort($array, static function ($a, $b) {
+                                                if (!isset($a['timestamp'], $b['timestamp'])) {
+                                                        return 0;
+                                                }
+
+                                                if ($a['timestamp'] === $b['timestamp']) {
+                                                        return 0;
+                                                }
+
+                                                return ($a['timestamp'] < $b['timestamp']) ? -1 : 1;
+                                        });
 
 					if($sort_type == 'descending')
 					{
