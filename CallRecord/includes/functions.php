@@ -2,7 +2,6 @@
 	
 	class model
 	{
-		private $logFile = '';
 
 		function __construct()
 		{
@@ -17,7 +16,6 @@
 			}
 		/* 	mssql_select_db(dbname,$connect) ; */
 		define('connect',$connect);
-		$this->initializeLogger();
 		}
 		
 		function admin_login()
@@ -54,90 +52,65 @@
 		}
 		function Sort_Directory_Files_By_Last_Modified($dir, $sort_type = 'descending', $date_format = "F d Y H:i:s")
 		{
-			if(!is_dir($dir))
-			{
-				$this->logError('Directory not found while sorting: '.$dir);
-				return array(array(), $sort_type);
-			}
-
-			$files = @scandir($dir);
-
-			if($files === false)
-			{
-				$this->logError('Unable to read directory contents while sorting: '.$dir);
-				return array(array(), $sort_type);
-			}
+			$files = scandir($dir);
 
 			$array = array();
-
+		
 			foreach($files as $file)
 			{
-				if($file != '.' && $file != '..')
-				{
-					$now = time();
-					$target = $dir.DIRECTORY_SEPARATOR.$file;
-					$last_modified = @filemtime($target);
+									if($file != '.' && $file != '..')
+						{
+							$now = time();
+							$last_modified = filemtime($dir.DIRECTORY_SEPARATOR.$file);
+						  
+							$time_passed_array = array();
 
-					if($last_modified === false)
-					{
-						$this->logError('Unable to read modification time for: '.$target);
-						continue;
+							$diff = $now - $last_modified;
+
+							$days = floor($diff / (3600 * 24));
+
+							if($days)
+							{
+							$time_passed_array['days'] = $days;
+							}
+
+							$diff = $diff - ($days * 3600 * 24);
+
+							$hours = floor($diff / 3600);
+
+							if($hours)
+							{
+							$time_passed_array['hours'] = $hours;
+							}
+
+							$diff = $diff - (3600 * $hours);
+
+							$minutes = floor($diff / 60);
+
+							if($minutes)
+							{
+							$time_passed_array['minutes'] = $minutes;
+							}
+
+							$seconds = $diff - ($minutes * 60);
+
+							$time_passed_array['seconds'] = $seconds;
+
+						$array[] = array('file'         => $file,
+										 'timestamp'    => $last_modified,
+										 'date'         => date ($date_format, $last_modified),
+										 'time_passed'  => $time_passed_array);
+						}
 					}
 
-					$time_passed_array = array();
+					usort($array, create_function('$a, $b', 'return strcmp($a["timestamp"], $b["timestamp"]);'));
 
-					$diff = $now - $last_modified;
-
-					$days = floor($diff / (3600 * 24));
-
-					if($days)
+					if($sort_type == 'descending')
 					{
-						$time_passed_array['days'] = $days;
+					krsort($array);
 					}
 
-					$diff = $diff - ($days * 3600 * 24);
-
-					$hours = floor($diff / 3600);
-
-					if($hours)
-					{
-						$time_passed_array['hours'] = $hours;
-					}
-
-					$diff = $diff - (3600 * $hours);
-
-					$minutes = floor($diff / 60);
-
-					if($minutes)
-					{
-						$time_passed_array['minutes'] = $minutes;
-					}
-
-					$seconds = $diff - ($minutes * 60);
-
-					$time_passed_array['seconds'] = $seconds;
-
-					$array[] = array('file'         => $file,
-							'timestamp'    => $last_modified,
-							'date'         => date ($date_format, $last_modified),
-							'time_passed'  => $time_passed_array);
-				}
-			}
-
-			usort($array, static function ($a, $b) {
-				if (!isset($a['timestamp'], $b['timestamp'])) {
-					return 0;
-				}
-
-				return $a['timestamp'] <=> $b['timestamp'];
-			});
-
-			if($sort_type == 'descending')
-			{
-				$array = array_reverse($array);
-			}
-
-			return array($array, $sort_type);
+					return array($array, $sort_type);
 		}
 		function get_directories($user,$value_full)
 		{
@@ -145,18 +118,9 @@
 			$directory = rtrim(maindirectory, '/\\') . DIRECTORY_SEPARATOR;
 			$print ='';
 			$print = '<table class="show">';
-			$has_results = false;
 		
 				$subdirectory	=	$directory.$value_full;
-			$errorHandler = function ($severity, $message, $file, $line) use ($subdirectory) {
-				throw new ErrorException($message, 0, $severity, $file, $line);
-			};
-
-			set_error_handler($errorHandler);
-
-			try {
-			$directoryExists = is_dir($subdirectory);
-			if($directoryExists)
+				if(is_dir($subdirectory))
 				{
 				
 					 $list = $this->Sort_Directory_Files_By_Last_Modified($subdirectory);
@@ -174,7 +138,6 @@
 					$i++;
 					$uplay	=	$directory.$value_full.DIRECTORY_SEPARATOR.$value['file'].DIRECTORY_SEPARATOR.$uval['file'];
 						if(is_file($uplay)){
-							$has_results = true;
 						$uexplode	=	explode('$',$uval['file']);
 						$uservicegroup	=	$uexplode[0];
 						$udatetime		=	$uexplode[1];
@@ -204,7 +167,6 @@
 						$i++;
 						$play	=	$directory.$value_full.DIRECTORY_SEPARATOR.$value['file'];
 						if(is_file($play)){
-						$has_results = true;
 						$explode	=	explode('$',$value['file']);
 						$servicegroup	=	$explode[0];
 						$datetime		=	$explode[1];
@@ -235,56 +197,12 @@
 					  } 
 					 } 
 				}
-
-			if(!$directoryExists)
-			{
-				$this->logError('Requested directory does not exist: '.$subdirectory);
-			}
-			if(!$has_results)
-			{
-				$print .= '<tr><td colspan="6">No recordings were found for this agent.</td></tr>';
-			}
-
-		} catch (ErrorException $exception) {
-			$this->logError('Failed to load recordings for '.$subdirectory.': '.$exception->getMessage());
-			$print .= '<tr><td colspan="6">Unable to load recordings for this agent. Please try again later.</td></tr>';
-		}
-		restore_error_handler();
-
 				
 				 $print .= '</table>';
 				echo $print;
-		}
-		
-		private function initializeLogger()
-		{
-			$logDirectory = dirname(__DIR__).DIRECTORY_SEPARATOR.'logs';
-			if(!is_dir($logDirectory))
-			{
-				@mkdir($logDirectory, 0777, true);
-			}
-
-			if(is_dir($logDirectory) && is_writable($logDirectory))
-			{
-				$this->logFile = $logDirectory.DIRECTORY_SEPARATOR.'application.log';
-			}
-		}
-
-		private function logError($message)
-		{
-			$line = '['.date('Y-m-d H:i:s').'] '.$message.PHP_EOL;
-			if($this->logFile !== '')
-			{
-				error_log($line, 3, $this->logFile);
-			}
-			else
-			{
-				error_log($line);
-			}
-		}
-
 		
 		
+		}
 		
 	}
 ?>
