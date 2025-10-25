@@ -12,10 +12,10 @@ readfile($file_url);
 ?>
 <?php include('includes/header.php'); ?>
 <?php if(!isset($_SESSION['login'])){
-	$model->redirect('login.php');
-} ?>	
-<script src="//192.168.1.154/callrecord/jquery-1.10.2.js"></script>
-<script src="//192.168.1.154/callrecord/ui/1.11.2/jquery-ui.js"></script>
+        $model->redirect('login.php');
+} ?>
+<script src="jquery-1.10.2.js"></script>
+<script src="ui/1.11.2/jquery-ui.js"></script>
   	<script>
 function DHTMLSound(surl,val) {
 $('.dummyspan').hide();
@@ -46,26 +46,26 @@ $(document).ready(function(){
     	</script>
 
 <div class="outerlayer">
-		      <div class="outerlayer1">
-			     <div class="header_botm">
-				   <div class="header_btm_lft">
-				    <h2><a href="index.php" style="color:#ced3d9;">Show all Agents</a></h2>
-				   </div>
-				   <div class="header_btm_cntr">
-				  <h2> <a href="search.php" style="color:#ced3d9;">Search</a></h2>
-				   </div>
-				   <div class="header_btm_cntr">
-				  <h2><a style="color:#ced3d9;">Select agent name to see recordings</a></h2>
-				   </div>
-				 </div>
-				 <div class="content">
+                      <div class="outerlayer1">
+                             <div class="header_botm">
+                                   <div class="header_btm_lft">
+                                    <h2><a class="header-link" href="index.php">Show all Agents</a></h2>
+                                   </div>
+                                   <div class="header_btm_cntr">
+                                  <h2><a class="header-link" href="search.php">Search</a></h2>
+                                   </div>
+                                   <div class="header_btm_cntr">
+                                  <h2 class="header-note">Select agent name to see recordings</h2>
+                                   </div>
+                                 </div>
+                                 <div class="content">
 <?php 
-	$directory = maindirectory;
+	$directory = rtrim(maindirectory, '/\\') . DIRECTORY_SEPARATOR;
 	if(!isset($_POST['action']))
 	{
 	$list_full = scandir($directory); 
 	?>
-	<table>
+        <table class="record-table">
 					   <tr class="table_top">
 							<th width="300">Agent Name</th>
 					        <th width="150">Other Parties</th>
@@ -86,7 +86,7 @@ $(document).ready(function(){
 		if($query==true){
 		$result	=	sqlsrv_fetch_array($query,SQLSRV_FETCH_ASSOC);
 	?>
-	<table>
+        <table class="record-table">
 		<tr class="table_row" colspan="4" ><td colspan="6" class="table_content"><img src="images/table_side_arrow.png" style=" float: left;margin: 5px 6px 0 5px;" /><img src="images/name_icon.png" style="margin: 0 4px 0 -2px;" /><a href="javascript:void(0)" class="click" rel="<?php echo $result['first_name'], $result['last_name'] ?>" subd="<?php echo $value_full; ?>"><?php echo $result['first_name'] ?> <?php echo $result['last_name']; ?></a></td>
 		</tr>
 		
@@ -105,7 +105,7 @@ $(document).ready(function(){
 	$i=0;
 	$list_full = scandir($directory); 
 	?>
-	<table>
+    <table class="record-table">
 					   <tr class="table_top">
 					   <th width="300">Agent Name</th>
 					        <th width="150">Other Parties</th>
@@ -136,7 +136,7 @@ $(document).ready(function(){
 					foreach($list[0] as $value)
 					 {
 						if (!in_array($value['file'],array(".",".."))) {
-						$play	=	$directory.$value_full.'/'.$value['file'];
+						$play	=	$directory.$value_full.DIRECTORY_SEPARATOR.$value['file'];
 						if(is_dir($play))
 						{
 						unset($unew_array);
@@ -145,7 +145,7 @@ $(document).ready(function(){
 							
 							foreach($ulist[0] as $uval)
 							{
-							if(is_file($play.'/'.$uval['file']))
+							if(is_file($play.DIRECTORY_SEPARATOR.$uval['file']))
 						{
 						$uexplode	=	explode('$',$uval['file']);
 						$uservicegroup	=	$uexplode[0];
@@ -189,7 +189,7 @@ $(document).ready(function(){
 						foreach($unew_array as $uuval)
 						{
 						$i++;
-						$uuplay	=	$directory.$value_full.'/'.$value['file'].'/'.$uuval;
+						$uuplay	=	$directory.$value_full.DIRECTORY_SEPARATOR.$value['file'].DIRECTORY_SEPARATOR.$uuval;
 						if(is_file($uuplay)){
 						$uuexplode	=	explode('$',$uuval);
 						$uuservicegroup	=	$uuexplode[0];
@@ -260,7 +260,7 @@ $(document).ready(function(){
 						foreach($new_array as $val)
 						{
 						$i++;
-						$play	=	$directory.$value_full.'/'.$val;
+						$play	=	$directory.$value_full.DIRECTORY_SEPARATOR.$val;
 						$explode	=	explode('$',$val);
 						$servicegroup	=	$explode[0];
 						$datetime		=	$explode[1];
