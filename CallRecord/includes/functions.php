@@ -1,6 +1,7 @@
 <?php
-        class model
-        {
+	
+	class model
+	{
 
 		function __construct()
 		{
@@ -14,7 +15,7 @@
 				/* die( print_r( sqlsrv_errors(), true)); */
 			}
 		/* 	mssql_select_db(dbname,$connect) ; */
-                define('connect',$connect);
+		define('connect',$connect);
 		}
 		
 		function admin_login()
@@ -51,87 +52,65 @@
 		}
 		function Sort_Directory_Files_By_Last_Modified($dir, $sort_type = 'descending', $date_format = "F d Y H:i:s")
 		{
-                        if(!is_dir($dir))
-                        {
-                                return array(array(), $sort_type);
-                        }
-
-                        $files = @scandir($dir);
-
-                        if($files === false)
-                        {
-                                return array(array(), $sort_type);
-                        }
+			$files = scandir($dir);
 
 			$array = array();
-
+		
 			foreach($files as $file)
 			{
-				if($file != '.' && $file != '..')
-				{
-					$now = time();
-					$target = $dir.DIRECTORY_SEPARATOR.$file;
-					$last_modified = @filemtime($target);
+									if($file != '.' && $file != '..')
+						{
+							$now = time();
+							$last_modified = filemtime($dir.DIRECTORY_SEPARATOR.$file);
+						  
+							$time_passed_array = array();
 
-                                        if($last_modified === false)
-                                        {
-                                                continue;
-                                        }
+							$diff = $now - $last_modified;
 
-					$time_passed_array = array();
+							$days = floor($diff / (3600 * 24));
 
-					$diff = $now - $last_modified;
+							if($days)
+							{
+							$time_passed_array['days'] = $days;
+							}
 
-					$days = floor($diff / (3600 * 24));
+							$diff = $diff - ($days * 3600 * 24);
 
-					if($days)
-					{
-						$time_passed_array['days'] = $days;
+							$hours = floor($diff / 3600);
+
+							if($hours)
+							{
+							$time_passed_array['hours'] = $hours;
+							}
+
+							$diff = $diff - (3600 * $hours);
+
+							$minutes = floor($diff / 60);
+
+							if($minutes)
+							{
+							$time_passed_array['minutes'] = $minutes;
+							}
+
+							$seconds = $diff - ($minutes * 60);
+
+							$time_passed_array['seconds'] = $seconds;
+
+						$array[] = array('file'         => $file,
+										 'timestamp'    => $last_modified,
+										 'date'         => date ($date_format, $last_modified),
+										 'time_passed'  => $time_passed_array);
+						}
 					}
 
-					$diff = $diff - ($days * 3600 * 24);
+					usort($array, create_function('$a, $b', 'return strcmp($a["timestamp"], $b["timestamp"]);'));
 
-					$hours = floor($diff / 3600);
-
-					if($hours)
+					if($sort_type == 'descending')
 					{
-						$time_passed_array['hours'] = $hours;
+					krsort($array);
 					}
 
-					$diff = $diff - (3600 * $hours);
-
-					$minutes = floor($diff / 60);
-
-					if($minutes)
-					{
-						$time_passed_array['minutes'] = $minutes;
-					}
-
-					$seconds = $diff - ($minutes * 60);
-
-					$time_passed_array['seconds'] = $seconds;
-
-					$array[] = array('file'         => $file,
-							'timestamp'    => $last_modified,
-							'date'         => date ($date_format, $last_modified),
-							'time_passed'  => $time_passed_array);
-				}
-			}
-
-			usort($array, static function ($a, $b) {
-				if (!isset($a['timestamp'], $b['timestamp'])) {
-					return 0;
-				}
-
-				return $a['timestamp'] <=> $b['timestamp'];
-			});
-
-			if($sort_type == 'descending')
-			{
-				$array = array_reverse($array);
-			}
-
-			return array($array, $sort_type);
+					return array($array, $sort_type);
 		}
 		function get_directories($user,$value_full)
 		{
@@ -139,11 +118,9 @@
 			$directory = rtrim(maindirectory, '/\\') . DIRECTORY_SEPARATOR;
 			$print ='';
 			$print = '<table class="show">';
-			$has_results = false;
 		
 				$subdirectory	=	$directory.$value_full;
-
-			if(is_dir($subdirectory))
+				if(is_dir($subdirectory))
 				{
 				
 					 $list = $this->Sort_Directory_Files_By_Last_Modified($subdirectory);
@@ -161,16 +138,13 @@
 					$i++;
 					$uplay	=	$directory.$value_full.DIRECTORY_SEPARATOR.$value['file'].DIRECTORY_SEPARATOR.$uval['file'];
 						if(is_file($uplay)){
-							$details = $this->parseRecordingFilename($uval['file']);
-							if(!$details){
-								continue;
-							}
-							$has_results = true;
-						$uservicegroup	=	$details['servicegroup'];
-						$udatetime		=	$details['datetime'];
-						$udescription	=	$details['description'];
-						$uotherparty	=	$details['otherparty'];
-						$ucall			=	$details['call'];
+						$uexplode	=	explode('$',$uval['file']);
+						$uservicegroup	=	$uexplode[0];
+						$udatetime		=	$uexplode[1];
+						$udescription	=	$uexplode[3];
+						$uotherparty	=	$uexplode[2]; 
+						$ucallid		=	$uexplode[4];
+						$ucall			=	explode('.',$ucallid);
 						$click="'http://192.168.1.154/SeCRecord/".$value_full."/".$value['file']."/".$this->replacePlus($uval['file'])."'";
 						$print .=  '<tr>
 					  
@@ -193,16 +167,13 @@
 						$i++;
 						$play	=	$directory.$value_full.DIRECTORY_SEPARATOR.$value['file'];
 						if(is_file($play)){
-						$details = $this->parseRecordingFilename($value['file']);
-						if(!$details){
-							continue;
-						}
-						$has_results = true;
-						$servicegroup	=	$details['servicegroup'];
-						$datetime		=	$details['datetime'];
-						$description	=	$details['description'];
-						$otherparty		=	$details['otherparty'];
-						$call			=	$details['call'];
+						$explode	=	explode('$',$value['file']);
+						$servicegroup	=	$explode[0];
+						$datetime		=	$explode[1];
+						$description	=	$explode[3];
+						$otherparty		=	$explode[2]; 
+						$callid			=	$explode[4];
+						$call			=	explode('.',$callid);
 						$clicknew="'http://192.168.1.154/SeCRecord/".$value_full."/".$this->replacePlus($value['file'])."'";
 				$print .='
 				
@@ -226,39 +197,12 @@
 					  } 
 					 } 
 				}
-
-
 				
-			if(!$has_results)
-			{
-				$print .= '<tr><td colspan="6">No recordings were found for this agent.</td></tr>';
-			}
 				 $print .= '</table>';
 				echo $print;
+		
+		
 		}
-		
-                private function parseRecordingFilename($filename)
-                {
-                        $parts = explode('$', $filename);
-
-                        if(count($parts) < 5)
-                        {
-                                return false;
-                        }
-
-                        $callParts = explode('.', $parts[4]);
-
-                        return array(
-                                'servicegroup' => $parts[0],
-                                'datetime' => $parts[1],
-                                'otherparty' => $parts[2],
-                                'description' => $parts[3],
-                                'call' => $callParts
-                        );
-                }
-
-		
-		
 		
 	}
 ?>
