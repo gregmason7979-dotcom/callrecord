@@ -96,22 +96,39 @@
 
 							$time_passed_array['seconds'] = $seconds;
 
-						$array[] = array('file'         => $file,
-										 'timestamp'    => $last_modified,
-										 'date'         => date ($date_format, $last_modified),
-										 'time_passed'  => $time_passed_array);
-						}
-					}
+                    $array[] = array('file'         => $file,
+                                                             'timestamp'    => $last_modified,
+                                                             'date'         => date ($date_format, $last_modified),
+                                                             'time_passed'  => $time_passed_array);
+                    }
+                }
 
-					usort($array, create_function('$a, $b', 'return strcmp($a["timestamp"], $b["timestamp"]);'));
+                usort($array, static function ($a, $b) {
+                        $aTime = $a['timestamp'] ?? null;
+                        $bTime = $b['timestamp'] ?? null;
 
-					if($sort_type == 'descending')
-					{
-					krsort($array);
-					}
+                        if ($aTime === $bTime) {
+                                return 0;
+                        }
 
-					return array($array, $sort_type);
-		}
+                        if ($aTime === null) {
+                                return 1;
+                        }
+
+                        if ($bTime === null) {
+                                return -1;
+                        }
+
+                        return ($aTime < $bTime) ? -1 : 1;
+                });
+
+                if($sort_type == 'descending')
+                {
+                $array = array_reverse($array);
+                }
+
+                return array($array, $sort_type);
+        }
 		function get_directories($user,$value_full)
 		{
 				$i=0;
