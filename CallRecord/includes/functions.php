@@ -61,7 +61,7 @@
 									if($file != '.' && $file != '..')
 						{
 							$now = time();
-							$last_modified = filemtime($dir.'/'.$file);
+							$last_modified = filemtime($dir.DIRECTORY_SEPARATOR.$file);
 						  
 							$time_passed_array = array();
 
@@ -103,19 +103,25 @@
 						}
 					}
 
-					usort($array, create_function('$a, $b', 'return strcmp($a["timestamp"], $b["timestamp"]);'));
+                                        usort($array, static function ($a, $b) {
+                                                if (!isset($a['timestamp'], $b['timestamp'])) {
+                                                        return 0;
+                                                }
 
-					if($sort_type == 'descending')
-					{
-					krsort($array);
-					}
+                                                return $a['timestamp'] <=> $b['timestamp'];
+                                        });
+
+                                        if($sort_type == 'descending')
+                                        {
+                                                $array = array_reverse($array);
+                                        }
 
 					return array($array, $sort_type);
 		}
 		function get_directories($user,$value_full)
 		{
 				$i=0;
-			$directory = maindirectory;
+			$directory = rtrim(maindirectory, '/\\') . DIRECTORY_SEPARATOR;
 			$print ='';
 			$print = '<table class="show">';
 		
@@ -130,13 +136,13 @@
 						
 						if (!in_array($value['file'],array(".",".."))) 
 					 {
-					 if(is_dir($directory.$value_full.'/'.$value['file']))
+					 if(is_dir($directory.$value_full.DIRECTORY_SEPARATOR.$value['file']))
 					 {
-					  $ulist = $this->Sort_Directory_Files_By_Last_Modified($directory.$value_full.'/'.$value['file']);
+					  $ulist = $this->Sort_Directory_Files_By_Last_Modified($directory.$value_full.DIRECTORY_SEPARATOR.$value['file']);
 					     foreach($ulist[0] as $uval)
 					{
 					$i++;
-					$uplay	=	$directory.$value_full.'/'.$value['file'].'/'.$uval['file'];
+					$uplay	=	$directory.$value_full.DIRECTORY_SEPARATOR.$value['file'].DIRECTORY_SEPARATOR.$uval['file'];
 						if(is_file($uplay)){
 						$uexplode	=	explode('$',$uval['file']);
 						$uservicegroup	=	$uexplode[0];
@@ -165,7 +171,7 @@
 					 }
 					 }
 						$i++;
-						$play	=	$directory.$value_full.'/'.$value['file'];
+						$play	=	$directory.$value_full.DIRECTORY_SEPARATOR.$value['file'];
 						if(is_file($play)){
 						$explode	=	explode('$',$value['file']);
 						$servicegroup	=	$explode[0];
