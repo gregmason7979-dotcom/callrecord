@@ -60,7 +60,7 @@ $(document).ready(function(){
 				 </div>
 				 <div class="content">
 <?php 
-	$directory = maindirectory;
+	$directory = rtrim(maindirectory, '/\\') . DIRECTORY_SEPARATOR;
 	if(!isset($_POST['action']))
 	{
 	$list_full = scandir($directory); 
@@ -136,7 +136,7 @@ $(document).ready(function(){
 					foreach($list[0] as $value)
 					 {
 						if (!in_array($value['file'],array(".",".."))) {
-						$play	=	$directory.$value_full.'/'.$value['file'];
+						$play	=	$directory.$value_full.DIRECTORY_SEPARATOR.$value['file'];
 						if(is_dir($play))
 						{
 						unset($unew_array);
@@ -145,7 +145,7 @@ $(document).ready(function(){
 							
 							foreach($ulist[0] as $uval)
 							{
-							if(is_file($play.'/'.$uval['file']))
+							if(is_file($play.DIRECTORY_SEPARATOR.$uval['file']))
 						{
 						$uexplode	=	explode('$',$uval['file']);
 						$uservicegroup	=	$uexplode[0];
@@ -189,7 +189,7 @@ $(document).ready(function(){
 						foreach($unew_array as $uuval)
 						{
 						$i++;
-						$uuplay	=	$directory.$value_full.'/'.$value['file'].'/'.$uuval;
+						$uuplay	=	$directory.$value_full.DIRECTORY_SEPARATOR.$value['file'].DIRECTORY_SEPARATOR.$uuval;
 						if(is_file($uuplay)){
 						$uuexplode	=	explode('$',$uuval);
 						$uuservicegroup	=	$uuexplode[0];
@@ -260,7 +260,7 @@ $(document).ready(function(){
 						foreach($new_array as $val)
 						{
 						$i++;
-						$play	=	$directory.$value_full.'/'.$val;
+						$play	=	$directory.$value_full.DIRECTORY_SEPARATOR.$val;
 						$explode	=	explode('$',$val);
 						$servicegroup	=	$explode[0];
 						$datetime		=	$explode[1];
