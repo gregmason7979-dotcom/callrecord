@@ -15,10 +15,8 @@
     <header class="app-header">
       <div class="app-header__inner">
         <h1 class="app-header__title">Recorded Calls</h1>
-        <p class="app-header__subtitle">Review, monitor, and download conversations with a refreshed dashboard experience.</p>
         <nav class="app-nav" aria-label="Primary">
           <span class="app-nav__welcome">Welcome</span>
-          <span class="app-nav__status"><span class="app-nav__status-dot" aria-hidden="true"></span>Secure Workspace</span>
           <a class="logout-link" href="logout.php">Logout</a>
         </nav>
       </div>
