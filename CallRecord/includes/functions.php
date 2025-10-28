@@ -1,7 +1,8 @@
 <?php
 	
-	class model
-	{
+        class model
+        {
+                private $recordingBaseUrl;
 
 		function __construct()
 		{
@@ -15,8 +16,9 @@
 				/* die( print_r( sqlsrv_errors(), true)); */
 			}
 		/* 	mssql_select_db(dbname,$connect) ; */
-		define('connect',$connect);
-		}
+                define('connect',$connect);
+                $this->recordingBaseUrl = defined('recording_base_url') ? rtrim(recording_base_url, '/\\') : '';
+                }
 		
 		function admin_login()
 		{
@@ -41,9 +43,65 @@
 			header('location:'.$url.'');
 			die;
 		}
-		function replacePlus($string){
-            return str_replace('+', '%2B', $string);
-        }
+                private function prepareRecordingSegments(array $segments)
+                {
+                        $clean = array();
+
+                        foreach ($segments as $segment) {
+                                if (!is_string($segment)) {
+                                        continue;
+                                }
+
+                                $sanitized = trim(str_replace(array('/', '\\'), '', $segment));
+
+                                if ($sanitized === '' || $sanitized === '.' || $sanitized === '..') {
+                                        continue;
+                                }
+
+                                $clean[] = $sanitized;
+                        }
+
+                        return $clean;
+                }
+
+                private function encodeSegmentForUrl($segment)
+                {
+                        $encoded = rawurlencode($segment);
+
+                        return strtr($encoded, array('%24' => '$'));
+                }
+
+                private function buildPublicRecordingUrl(array $segments)
+                {
+                        $cleanSegments = $this->prepareRecordingSegments($segments);
+
+                        if (empty($cleanSegments) || empty($this->recordingBaseUrl)) {
+                                return '';
+                        }
+
+                        $encodedSegments = array_map(array($this, 'encodeSegmentForUrl'), $cleanSegments);
+
+                        return $this->recordingBaseUrl . '/' . implode('/', $encodedSegments);
+                }
+
+                private function buildDownloadHref(array $segments, $downloadName)
+                {
+                        $cleanSegments = $this->prepareRecordingSegments($segments);
+                        $relativePath = implode('/', $cleanSegments);
+
+                        if ($relativePath === '') {
+                                return '#';
+                        }
+
+                        $safeName = basename($downloadName);
+
+                        $query = http_build_query(array(
+                                'download' => $relativePath,
+                                'filename' => $safeName,
+                        ));
+
+                        return 'index.php?' . $query;
+                }
 		function logout()
 		{
 			unset($_SESSION['username']);
@@ -96,113 +154,203 @@
 
 							$time_passed_array['seconds'] = $seconds;
 
-						$array[] = array('file'         => $file,
-										 'timestamp'    => $last_modified,
-										 'date'         => date ($date_format, $last_modified),
-										 'time_passed'  => $time_passed_array);
-						}
-					}
+                    $array[] = array('file'         => $file,
+                                                             'timestamp'    => $last_modified,
+                                                             'date'         => date ($date_format, $last_modified),
+                                                             'time_passed'  => $time_passed_array);
+                    }
+                }
 
-					usort($array, create_function('$a, $b', 'return strcmp($a["timestamp"], $b["timestamp"]);'));
+                usort($array, static function ($a, $b) {
+                        $aTime = $a['timestamp'] ?? null;
+                        $bTime = $b['timestamp'] ?? null;
 
-					if($sort_type == 'descending')
-					{
-					krsort($array);
-					}
+                        if ($aTime === $bTime) {
+                                return 0;
+                        }
 
-					return array($array, $sort_type);
-		}
-		function get_directories($user,$value_full)
-		{
-				$i=0;
-			$directory = maindirectory;
-			$print ='';
-			$print = '<table class="show">';
-		
-				$subdirectory	=	$directory.$value_full;
-				if(is_dir($subdirectory))
-				{
-				
-					 $list = $this->Sort_Directory_Files_By_Last_Modified($subdirectory);
-					/*  echo '<pre>';print_R($list); echo'</pre>';  */
-					 foreach($list[0] as $value)
-					{
-						
-						if (!in_array($value['file'],array(".",".."))) 
-					 {
-					 if(is_dir($directory.$value_full.'/'.$value['file']))
-					 {
-					  $ulist = $this->Sort_Directory_Files_By_Last_Modified($directory.$value_full.'/'.$value['file']);
-					     foreach($ulist[0] as $uval)
-					{
-					$i++;
-					$uplay	=	$directory.$value_full.'/'.$value['file'].'/'.$uval['file'];
-						if(is_file($uplay)){
-						$uexplode	=	explode('$',$uval['file']);
-						$uservicegroup	=	$uexplode[0];
-						$udatetime		=	$uexplode[1];
-						$udescription	=	$uexplode[3];
-						$uotherparty	=	$uexplode[2]; 
-						$ucallid		=	$uexplode[4];
-						$ucall			=	explode('.',$ucallid);
-						$click="'http://192.168.1.154/SeCRecord/".$value_full."/".$value['file']."/".$this->replacePlus($uval['file'])."'";
-						$print .=  '<tr>
-					  
-					   <td width="350">
-					   <span id="dummyspan_'.$i.'" class="dummyspan"></span>
-						<a href="javascript:void(0)" onclick="DHTMLSound('.$click.','.$i.')"><img src="images/play_btn.png" /></a>
-					   
-					   <a href="index.php?download='.urlencode($uplay).'&filename='.urlencode($uval['file']).'">Download</a>
-					</td>
-					<td width="150">'.$uotherparty.'</td>
-					   <td width="250">'.date('d/m/Y H:i:s A',strtotime($udatetime)).'</td>
-					   <td>'.$uservicegroup.'</td>
-					   <td>'.$ucall[0].'</td>
-					   <td>'.$udescription.'</td>
-					   </tr>';
-					  
-					}
-					 }
-					 }
-						$i++;
-						$play	=	$directory.$value_full.'/'.$value['file'];
-						if(is_file($play)){
-						$explode	=	explode('$',$value['file']);
-						$servicegroup	=	$explode[0];
-						$datetime		=	$explode[1];
-						$description	=	$explode[3];
-						$otherparty		=	$explode[2]; 
-						$callid			=	$explode[4];
-						$call			=	explode('.',$callid);
-						$clicknew="'http://192.168.1.154/SeCRecord/".$value_full."/".$this->replacePlus($value['file'])."'";
-				$print .='
-				
-					  <tr>
-					  
-					   <td width="350">
-					   <span id="dummyspan_'.$i.'" class="dummyspan"></span>
-						<a href="javascript:void(0)" onclick="DHTMLSound('.$clicknew.','.$i.')"><img src="images/play_btn.png" /></a>
-					   
-					   <a href="index.php?download='.urlencode($play).'&filename='.urlencode($value['file']).'">Download</a>
-					</td>
-					<td width="150">'.$otherparty.'</td>
-					   <td width="250">'. date('d/m/Y H:i:s A',strtotime($datetime)).'</td>
-					   <td>'.$servicegroup.'</td>
-					   <td>'.$call[0].'</td>
-					   <td>'.$description.'</td>
-					   </tr>';
-					 
-					 
-					  }
-					  } 
-					 } 
-				}
-				
-				 $print .= '</table>';
-				echo $print;
-		
-		
-		}
+                        if ($aTime === null) {
+                                return 1;
+                        }
+
+                        if ($bTime === null) {
+                                return -1;
+                        }
+
+                        return ($aTime < $bTime) ? -1 : 1;
+                });
+
+                if($sort_type == 'descending')
+                {
+                $array = array_reverse($array);
+                }
+
+                return array($array, $sort_type);
+        }
+                private function recordingMatchesFilters($datetime, $description, $otherparty, $servicegroup, $callId)
+                {
+                        if (!isset($_POST['action']) || $_POST['action'] !== 'getdirectory') {
+                                return true;
+                        }
+
+                        if (!empty($_POST['name'])) {
+                                return $_POST['name'] === $description;
+                        }
+
+                        if (!empty($_POST['date']) && !empty($_POST['enddate'])) {
+                                $paymentDate = date('Y-m-d', strtotime($datetime));
+                                return (strtotime($paymentDate) >= strtotime($_POST['date'])) && (strtotime($paymentDate) <= strtotime($_POST['enddate']));
+                        }
+
+                        if (!empty($_POST['other_party'])) {
+                                return $_POST['other_party'] === $otherparty;
+                        }
+
+                        if (!empty($_POST['service_group'])) {
+                                return $_POST['service_group'] === $servicegroup;
+                        }
+
+                        if (!empty($_POST['call_id'])) {
+                                return $_POST['call_id'] === $callId;
+                        }
+
+                        return true;
+                }
+
+                private function appendRecordingRow($print, $index, array $pathSegments, $downloadName, $otherparty, $datetime, $servicegroup, $callId, $description)
+                {
+                        $print .= $this->renderRecordingRow($index, $pathSegments, $downloadName, $otherparty, $datetime, $servicegroup, $callId, $description);
+
+                        return $print;
+                }
+
+                public function renderRecordingRow($index, array $pathSegments, $downloadName, $otherparty, $datetime, $servicegroup, $callId, $description)
+                {
+                        $playUrl = $this->buildPublicRecordingUrl($pathSegments);
+                        $downloadLabel = $downloadName !== '' ? $downloadName : 'recording.mp3';
+                        $downloadHref = $this->buildDownloadHref($pathSegments, $downloadLabel);
+                        $otherpartyEsc = htmlspecialchars($otherparty, ENT_QUOTES, 'UTF-8');
+                        $serviceEsc = htmlspecialchars($servicegroup, ENT_QUOTES, 'UTF-8');
+                        $descriptionEsc = htmlspecialchars($description, ENT_QUOTES, 'UTF-8');
+                        $callEsc = htmlspecialchars($callId, ENT_QUOTES, 'UTF-8');
+                        $dateDisplay = date('d/m/Y H:i:s A', strtotime($datetime));
+                        $dateEsc = htmlspecialchars($dateDisplay, ENT_QUOTES, 'UTF-8');
+                        $downloadHref = htmlspecialchars($downloadHref, ENT_QUOTES, 'UTF-8');
+                        $downloadAttr = htmlspecialchars($downloadLabel, ENT_QUOTES, 'UTF-8');
+                        $playArgument = json_encode($playUrl, JSON_UNESCAPED_SLASHES);
+                        if ($playArgument === false) {
+                                $playArgument = json_encode('');
+                        }
+                        $onclick = htmlspecialchars('DHTMLSound('.$playArgument.','.$index.')', ENT_QUOTES, 'UTF-8');
+
+                        return <<<HTML
+                                  <tr class="table_row">
+
+                                   <td width="350" class="record-actions">
+                                     <div class="action-toolbar">
+                                       <a href="javascript:void(0)" class="action-icon action-icon--play" onclick="{$onclick}">
+                                         <span class="sr-only">Play recording</span>
+                                         <svg viewBox="0 0 24 24" role="presentation"><path fill="currentColor" d="M9.5 7.4a.75.75 0 0 1 1.15-.64l6.25 4.1a.75.75 0 0 1 0 1.28l-6.25 4.1A.75.75 0 0 1 9.5 15.6Z"/></svg>
+                                       </a>
+
+                                       <a class="download-link" href="{$downloadHref}" download="{$downloadAttr}">
+                                         <span class="download-link__icon" aria-hidden="true"><svg viewBox="0 0 24 24" role="presentation"><path fill="currentColor" d="M12 3.25a.75.75 0 0 1 .75.75v8.19l2.22-2.22a.75.75 0 1 1 1.06 1.06l-3.5 3.5a.75.75 0 0 1-1.06 0l-3.5-3.5a.75.75 0 1 1 1.06-1.06l2.22 2.22V4a.75.75 0 0 1 .75-.75Zm-5.25 13a.75.75 0 0 0 0 1.5h10.5a.75.75 0 0 0 0-1.5Z"/></svg></span>
+                                         <span>Download</span>
+                                       </a>
+                                     </div>
+                                     <div id="dummyspan_{$index}" class="dummyspan" aria-live="polite"></div>
+                                   </td>
+                                   <td width="150">{$otherpartyEsc}</td>
+                                   <td width="250">{$dateEsc}</td>
+                                   <td><span class="record-pill record-pill--group">{$serviceEsc}</span></td>
+                                   <td><span class="record-pill record-pill--id">{$callEsc}</span></td>
+                                   <td>{$descriptionEsc}</td>
+                                  </tr>
+HTML;
+                }
+
+
+                function get_directories($user,$value_full)
+                {
+                        $i = 0;
+                        $directory = maindirectory;
+                        $print = '<table class="record-table record-table--detail">';
+                        $subdirectory = $directory.$value_full;
+
+                        if (is_dir($subdirectory)) {
+                                $list = $this->Sort_Directory_Files_By_Last_Modified($subdirectory);
+
+                                foreach ($list[0] as $value) {
+                                        if (in_array($value['file'], array(".",".."))) {
+                                                continue;
+                                        }
+
+                                        $agentPath = $directory.$value_full.'/'.$value['file'];
+
+                                        if (is_dir($agentPath)) {
+                                                $ulist = $this->Sort_Directory_Files_By_Last_Modified($agentPath);
+
+                                                foreach ($ulist[0] as $uval) {
+                                                        $recordPath = $agentPath.'/'.$uval['file'];
+
+                                                        if (!is_file($recordPath)) {
+                                                                continue;
+                                                        }
+
+                                                        $uexplode = explode('$', $uval['file']);
+                                                        if (count($uexplode) < 5) {
+                                                                continue;
+                                                        }
+
+                                                        $uservicegroup = $uexplode[0];
+                                                        $udatetime = $uexplode[1];
+                                                        $uotherparty = $uexplode[2];
+                                                        $udescription = $uexplode[3];
+                                                        $ucall = explode('.', $uexplode[4]);
+                                                        $ucallId = $ucall[0];
+
+                                                        if (!$this->recordingMatchesFilters($udatetime, $udescription, $uotherparty, $uservicegroup, $ucallId)) {
+                                                                continue;
+                                                        }
+
+                                                        $segments = array($value_full, $value['file'], $uval['file']);
+                                                        $i++;
+                                                        $print = $this->appendRecordingRow($print, $i, $segments, $uval['file'], $uotherparty, $udatetime, $uservicegroup, $ucallId, $udescription);
+                                                }
+                                        }
+
+                                        $recordPath = $agentPath;
+
+                                        if (is_file($recordPath)) {
+                                                $explode = explode('$', $value['file']);
+                                                if (count($explode) < 5) {
+                                                        continue;
+                                                }
+
+                                                $servicegroup = $explode[0];
+                                                $datetime = $explode[1];
+                                                $otherparty = $explode[2];
+                                                $description = $explode[3];
+                                                $call = explode('.', $explode[4]);
+                                                $callId = $call[0];
+
+                                                if (!$this->recordingMatchesFilters($datetime, $description, $otherparty, $servicegroup, $callId)) {
+                                                        continue;
+                                                }
+
+                                                $segments = array($value_full, $value['file']);
+                                                $i++;
+                                                $print = $this->appendRecordingRow($print, $i, $segments, $value['file'], $otherparty, $datetime, $servicegroup, $callId, $description);
+                                        }
+                                }
+                        }
+
+                        $print .= '</table>';
+                        echo $print;
+
+
+                }
+
 		
 	}
 ?>
