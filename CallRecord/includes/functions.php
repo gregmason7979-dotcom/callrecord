@@ -19,6 +19,81 @@
                 define('connect',$connect);
                 $this->recordingBaseUrl = defined('recording_base_url') ? rtrim(recording_base_url, '/\\') : '';
                 }
+
+                public function getAgentRoster()
+                {
+                        $directory = rtrim(maindirectory, '/\\');
+
+                        if ($directory === '' || !is_dir($directory)) {
+                                return array();
+                        }
+
+                        $roster = array();
+                        $usedDomIds = array();
+                        $seenAgentDirectories = array();
+                        $listFull = scandir($directory);
+
+                        foreach ($listFull as $valueFull) {
+                                if (in_array($valueFull, array('.', '..'))) {
+                                        continue;
+                                }
+
+                                $agentIdForLookup = ltrim($valueFull, '0');
+                                if ($agentIdForLookup === '') {
+                                        $agentIdForLookup = $valueFull;
+                                }
+
+                                if (isset($seenAgentDirectories[$agentIdForLookup])) {
+                                        continue;
+                                }
+
+                                $seenAgentDirectories[$agentIdForLookup] = true;
+
+                                $select = "select first_name,last_name from dbo.cc_user where id='" . $agentIdForLookup . "'";
+                                $query = sqlsrv_query(connect, $select);
+                                $agentDisplay = $valueFull;
+                                $result = false;
+
+                                if ($query !== false) {
+                                        $result = sqlsrv_fetch_array($query, SQLSRV_FETCH_ASSOC);
+                                }
+
+                                if ($result) {
+                                        $firstName = isset($result['first_name']) ? $result['first_name'] : '';
+                                        $lastName = isset($result['last_name']) ? $result['last_name'] : '';
+                                        $agentDisplay = trim($firstName . ' ' . $lastName);
+
+                                        if ($agentDisplay === '') {
+                                                $agentDisplay = $valueFull;
+                                        }
+                                }
+
+                                $agentDomId = preg_replace('/[^A-Za-z0-9_-]/', '', $valueFull);
+
+                                if ($agentDomId === '') {
+                                        $agentDomId = substr(md5($valueFull), 0, 8);
+                                }
+
+                                $baseDomId = $agentDomId;
+                                $suffix = 2;
+
+                                while (isset($usedDomIds[$agentDomId])) {
+                                        $agentDomId = $baseDomId . '-' . $suffix;
+                                        $suffix++;
+                                }
+
+                                $usedDomIds[$agentDomId] = true;
+
+                                $roster[] = array(
+                                        'domId' => $agentDomId,
+                                        'directory' => $valueFull,
+                                        'displayName' => $agentDisplay,
+                                        'agentId' => $agentIdForLookup,
+                                );
+                        }
+
+                        return $roster;
+                }
 		
 		function admin_login()
 		{
@@ -217,13 +292,6 @@
                         return true;
                 }
 
-                private function appendRecordingRow($print, $index, array $pathSegments, $downloadName, $otherparty, $datetime, $servicegroup, $callId, $description)
-                {
-                        $print .= $this->renderRecordingRow($index, $pathSegments, $downloadName, $otherparty, $datetime, $servicegroup, $callId, $description);
-
-                        return $print;
-                }
-
                 public function renderRecordingRow($index, array $pathSegments, $downloadName, $otherparty, $datetime, $servicegroup, $callId, $description)
                 {
                         $playUrl = $this->buildPublicRecordingUrl($pathSegments);
@@ -272,10 +340,18 @@ HTML;
 
                 function get_directories($user,$value_full)
                 {
-                        $i = 0;
-                        $directory = maindirectory;
-                        $print = '<table class="record-table record-table--detail">';
-                        $subdirectory = $directory.$value_full;
+                        $scope = (isset($_POST['scope']) && $_POST['scope'] === 'all') ? 'all' : 'recent';
+                        $page = isset($_POST['page']) ? (int) $_POST['page'] : 1;
+                        if ($page < 1) {
+                                $page = 1;
+                        }
+
+                        $perPage = 20;
+                        $recentCutoff = strtotime('-14 days');
+
+                        $baseDirectory = rtrim(maindirectory, '/\\');
+                        $recordings = array();
+                        $subdirectory = $baseDirectory . DIRECTORY_SEPARATOR . $value_full;
 
                         if (is_dir($subdirectory)) {
                                 $list = $this->Sort_Directory_Files_By_Last_Modified($subdirectory);
@@ -285,15 +361,22 @@ HTML;
                                                 continue;
                                         }
 
-                                        $agentPath = $directory.$value_full.'/'.$value['file'];
+                                        $agentPath = $subdirectory . DIRECTORY_SEPARATOR . $value['file'];
+                                        $timestamp = isset($value['timestamp']) ? (int) $value['timestamp'] : @filemtime($agentPath);
 
                                         if (is_dir($agentPath)) {
                                                 $ulist = $this->Sort_Directory_Files_By_Last_Modified($agentPath);
 
                                                 foreach ($ulist[0] as $uval) {
-                                                        $recordPath = $agentPath.'/'.$uval['file'];
+                                                        $recordPath = $agentPath . DIRECTORY_SEPARATOR . $uval['file'];
 
                                                         if (!is_file($recordPath)) {
+                                                                continue;
+                                                        }
+
+                                                        $fileTimestamp = isset($uval['timestamp']) ? (int) $uval['timestamp'] : @filemtime($recordPath);
+
+                                                        if ($scope === 'recent' && $fileTimestamp !== false && $fileTimestamp < $recentCutoff) {
                                                                 continue;
                                                         }
 
@@ -313,39 +396,149 @@ HTML;
                                                                 continue;
                                                         }
 
-                                                        $segments = array($value_full, $value['file'], $uval['file']);
-                                                        $i++;
-                                                        $print = $this->appendRecordingRow($print, $i, $segments, $uval['file'], $uotherparty, $udatetime, $uservicegroup, $ucallId, $udescription);
+                                                        $recordings[] = array(
+                                                                'segments' => array($value_full, $value['file'], $uval['file']),
+                                                                'downloadName' => $uval['file'],
+                                                                'otherparty' => $uotherparty,
+                                                                'datetime' => $udatetime,
+                                                                'servicegroup' => $uservicegroup,
+                                                                'callId' => $ucallId,
+                                                                'description' => $udescription,
+                                                                'timestamp' => ($fileTimestamp !== false) ? $fileTimestamp : null,
+                                                        );
                                                 }
                                         }
 
                                         $recordPath = $agentPath;
 
-                                        if (is_file($recordPath)) {
-                                                $explode = explode('$', $value['file']);
-                                                if (count($explode) < 5) {
-                                                        continue;
-                                                }
-
-                                                $servicegroup = $explode[0];
-                                                $datetime = $explode[1];
-                                                $otherparty = $explode[2];
-                                                $description = $explode[3];
-                                                $call = explode('.', $explode[4]);
-                                                $callId = $call[0];
-
-                                                if (!$this->recordingMatchesFilters($datetime, $description, $otherparty, $servicegroup, $callId)) {
-                                                        continue;
-                                                }
-
-                                                $segments = array($value_full, $value['file']);
-                                                $i++;
-                                                $print = $this->appendRecordingRow($print, $i, $segments, $value['file'], $otherparty, $datetime, $servicegroup, $callId, $description);
+                                        if (!is_file($recordPath)) {
+                                                continue;
                                         }
+
+                                        if ($scope === 'recent' && $timestamp !== false && $timestamp < $recentCutoff) {
+                                                continue;
+                                        }
+
+                                        $explode = explode('$', $value['file']);
+                                        if (count($explode) < 5) {
+                                                continue;
+                                        }
+
+                                        $servicegroup = $explode[0];
+                                        $datetime = $explode[1];
+                                        $otherparty = $explode[2];
+                                        $description = $explode[3];
+                                        $call = explode('.', $explode[4]);
+                                        $callId = $call[0];
+
+                                        if (!$this->recordingMatchesFilters($datetime, $description, $otherparty, $servicegroup, $callId)) {
+                                                continue;
+                                        }
+
+                                        $recordings[] = array(
+                                                'segments' => array($value_full, $value['file']),
+                                                'downloadName' => $value['file'],
+                                                'otherparty' => $otherparty,
+                                                'datetime' => $datetime,
+                                                'servicegroup' => $servicegroup,
+                                                'callId' => $callId,
+                                                'description' => $description,
+                                                'timestamp' => ($timestamp !== false) ? $timestamp : null,
+                                        );
                                 }
                         }
 
+                        $totalRecords = count($recordings);
+
+                        $agentAttr = htmlspecialchars($user, ENT_QUOTES, 'UTF-8');
+                        $directoryAttr = htmlspecialchars($value_full, ENT_QUOTES, 'UTF-8');
+                        $scopeAttr = htmlspecialchars($scope, ENT_QUOTES, 'UTF-8');
+
+                        $print = '<div class="recording-panel" data-agent="' . $agentAttr . '" data-directory="' . $directoryAttr . '" data-scope="' . $scopeAttr . '">';
+                        $print .= '<div class="recording-panel__controls">';
+
+                        if ($scope === 'recent') {
+                                $print .= '<h3 class="recording-panel__title">Recent recordings (last 14 days)</h3>';
+                                $print .= '<button type="button" class="recording-panel__toggle" data-role="show-all" data-scope="all" data-agent="' . $agentAttr . '" data-directory="' . $directoryAttr . '">View all recordings</button>';
+                        } else {
+                                $print .= '<h3 class="recording-panel__title">All recordings</h3>';
+                                $print .= '<button type="button" class="recording-panel__toggle" data-role="show-recent" data-scope="recent" data-agent="' . $agentAttr . '" data-directory="' . $directoryAttr . '">Show last 14 days</button>';
+                        }
+
+                        $print .= '</div>';
+
+                        if ($totalRecords === 0) {
+                                if ($scope === 'recent') {
+                                        $print .= '<div class="recording-panel__empty">No recordings found in the last 14 days.<br><span>please use the search function to find recordings older than 14 days.</span></div>';
+                                        $print .= '<div class="recording-panel__actions"><button type="button" class="recording-panel__toggle" data-role="show-all" data-scope="all" data-agent="' . $agentAttr . '" data-directory="' . $directoryAttr . '">View all recordings</button></div>';
+                                } else {
+                                        $print .= '<div class="recording-panel__empty">No recordings available.</div>';
+                                }
+
+                                $print .= '</div>';
+                                echo $print;
+                                return;
+                        }
+
+                        $totalPages = (int) ceil($totalRecords / $perPage);
+
+                        if ($totalPages < 1) {
+                                $totalPages = 1;
+                        }
+
+                        if ($page > $totalPages) {
+                                $page = $totalPages;
+                        }
+
+                        $offset = ($page - 1) * $perPage;
+                        $pageRecords = array_slice($recordings, $offset, $perPage);
+
+                        $rangeStart = $offset + 1;
+                        $rangeEnd = $offset + count($pageRecords);
+
+                        $print .= '<p class="recording-panel__meta">Showing ' . $rangeStart . '&ndash;' . $rangeEnd . ' of ' . $totalRecords . ' recordings</p>';
+                        $print .= '<table class="record-table record-table--detail">';
+
+                        foreach ($pageRecords as $index => $record) {
+                                $rowIndex = $index + 1;
+                                $print .= $this->renderRecordingRow(
+                                        $rowIndex,
+                                        $record['segments'],
+                                        $record['downloadName'],
+                                        $record['otherparty'],
+                                        $record['datetime'],
+                                        $record['servicegroup'],
+                                        $record['callId'],
+                                        $record['description']
+                                );
+                        }
+
                         $print .= '</table>';
+
+                        if ($totalPages > 1) {
+                                $print .= '<nav class="pagination" aria-label="Recordings pagination">';
+
+                                if ($page > 1) {
+                                        $prev = $page - 1;
+                                        $print .= '<button type="button" class="pagination__btn" data-role="page" data-page="' . $prev . '" data-scope="' . $scopeAttr . '" data-agent="' . $agentAttr . '" data-directory="' . $directoryAttr . '">Previous</button>';
+                                } else {
+                                        $print .= '<span class="pagination__placeholder"></span>';
+                                }
+
+                                $print .= '<span class="pagination__status">Page ' . $page . ' of ' . $totalPages . '</span>';
+
+                                if ($page < $totalPages) {
+                                        $next = $page + 1;
+                                        $print .= '<button type="button" class="pagination__btn" data-role="page" data-page="' . $next . '" data-scope="' . $scopeAttr . '" data-agent="' . $agentAttr . '" data-directory="' . $directoryAttr . '">Next</button>';
+                                } else {
+                                        $print .= '<span class="pagination__placeholder"></span>';
+                                }
+
+                                $print .= '</nav>';
+                        }
+
+                        $print .= '</div>';
+
                         echo $print;
 
 
