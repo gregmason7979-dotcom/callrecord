@@ -50,48 +50,112 @@ if(isset($_REQUEST['download']))
 } ?>
 <script src="jquery-1.10.2.js"></script>
 <script src="ui/1.11.2/jquery-ui.js"></script>
-  	<script>
+        <script>
 function DHTMLSound(surl,val) {
 $('.dummyspan').hide();
 $('#dummyspan_'+val).show();
   document.getElementById("dummyspan_"+val+"").innerHTML=
-	"<audio controls><source src='"+surl+"' hidden='false' autostart='false' loop='false' ></audio>";
+        "<audio controls><source src='"+surl+"' hidden='false' autostart='false' loop='false' ></audio>";
 
 }
 $(document).ready(function(){
-	$('.click').on('click', function(event){
-		event.preventDefault();
+        function getContainers(agentKey) {
+                return {
+                        detail: $('#detail_'+agentKey),
+                        target: $('#show_'+agentKey)
+                };
+        }
 
-		var name	=	$(this).attr('rel');
-		var direct	=	$(this).attr('subd');
-		var datastring = 'user='+name+'&directory='+direct+'&action=getdirectory';
-		var $detailRow = $('#detail_'+name);
-		var $targetContainer = $('#show_'+name);
+        function fetchRecordings(agentKey, directory, scope, page) {
+                var containers = getContainers(agentKey);
+                var $detailRow = containers.detail;
+                var $targetContainer = containers.target;
 
-		$('.table_row--agent').removeClass('table_row--agent-active');
-		$(this).closest('.table_row').addClass('table_row--agent-active');
+                if (!$detailRow.length || !$targetContainer.length) {
+                        return;
+                }
 
-		$('.detail-row').removeClass('detail-row--visible');
-		$detailRow.addClass('detail-row--visible');
+                $targetContainer
+                        .addClass('showfull--visible')
+                        .html('<div class="showfull__loading">Loading recordings...</div>');
 
-		$('.showfull').removeClass('showfull--visible').html('');
+                $.ajax({
+                        type: 'POST',
+                        url: 'process.php',
+                        data: {
+                                action: 'getdirectory',
+                                user: agentKey,
+                                directory: directory,
+                                scope: scope || 'recent',
+                                page: page || 1
+                        },
+                        success: function(response) {
+                                $targetContainer.html(response).addClass('showfull--visible');
+                                $detailRow.addClass('detail-row--visible');
+                        },
+                        error: function() {
+                                $targetContainer.html('<div class="showfull__error">Unable to load recordings.</div>').addClass('showfull--visible');
+                                $detailRow.addClass('detail-row--visible');
+                        }
+                });
+        }
 
-		$.ajax({
-		type:'POST',
-		url:'process.php',
-		data:datastring,
-		success:function(response)
-		{
-			$targetContainer.html(response).addClass('showfull--visible');
-		},
-		error:function(){
-			$targetContainer.html('<div class="showfull__error">Unable to load recordings.</div>').addClass('showfull--visible');
-		}
-		});
-	});
+        $('.click').on('click', function(event){
+                event.preventDefault();
 
+                var $trigger = $(this);
+                var agentKey = $trigger.attr('rel');
+                var directory = $trigger.attr('subd');
+
+                if (!agentKey || !directory) {
+                        return;
+                }
+
+                $('.table_row--agent').removeClass('table_row--agent-active');
+                $trigger.closest('.table_row').addClass('table_row--agent-active');
+
+                $('.detail-row').removeClass('detail-row--visible');
+                $('.showfull').removeClass('showfull--visible').html('');
+
+                fetchRecordings(agentKey, directory, 'recent', 1);
+        });
+
+        $('.app-main').on('click', '.recording-panel__toggle', function(event){
+                event.preventDefault();
+
+                var $button = $(this);
+                var $panel = $button.closest('.recording-panel');
+                var scope = $button.data('scope') || ($panel.length ? $panel.data('scope') : 'recent');
+                var agentKey = $button.data('agent') || ($panel.length ? $panel.data('agent') : '');
+                var directory = $button.data('directory') || ($panel.length ? $panel.data('directory') : '');
+
+                if (!agentKey || !directory) {
+                        return;
+                }
+
+                fetchRecordings(agentKey, directory, scope, 1);
+        });
+
+        $('.app-main').on('click', '.pagination__btn', function(event){
+                event.preventDefault();
+
+                var $button = $(this);
+                var $panel = $button.closest('.recording-panel');
+                var page = parseInt($button.data('page'), 10) || 1;
+                var scope = $button.data('scope') || ($panel.length ? $panel.data('scope') : 'recent');
+                var agentKey = $button.data('agent') || ($panel.length ? $panel.data('agent') : '');
+                var directory = $button.data('directory') || ($panel.length ? $panel.data('directory') : '');
+
+                if (!agentKey || !directory) {
+                        return;
+                }
+
+                fetchRecordings(agentKey, directory, scope, page);
+        });
 });
-    	</script>
+        </script>
+
+  	
 
 <div class="outerlayer">
                       <div class="outerlayer1">
@@ -111,7 +175,7 @@ $(document).ready(function(){
 	$directory = rtrim(maindirectory, '/\\') . DIRECTORY_SEPARATOR;
 	if(!isset($_POST['action']))
 	{
-	$list_full = scandir($directory);
+	$rosterEntries = $model->getAgentRoster();
 ?>
         <table class="record-table record-table--roster">
           <thead>
@@ -126,39 +190,29 @@ $(document).ready(function(){
           </thead>
           <tbody>
 <?php
-
-        foreach($list_full as $value_full)
-        {
-                if (!in_array($value_full,array(".","..")))
-         {
-                 $select        =       "select first_name,last_name from dbo.cc_user where id='".ltrim($value_full,'0')."'";
-                $query  =       sqlsrv_query(connect,$select);
-                if($query==true){
-                $result =       sqlsrv_fetch_array($query,SQLSRV_FETCH_ASSOC);
-                if($result){
-                        $firstName = isset($result['first_name']) ? $result['first_name'] : '';
-                        $lastName = isset($result['last_name']) ? $result['last_name'] : '';
-                        $agentDisplay = trim($firstName.' '.$lastName);
-                        if($agentDisplay === ''){
-                                $agentDisplay = $value_full;
-                        }
-                        $agentKey = preg_replace('/[^A-Za-z0-9_-]/','',$firstName.$lastName);
-                        if($agentKey === ''){
-                                $agentKey = preg_replace('/[^A-Za-z0-9_-]/','',$value_full);
-                        }
-                        if($agentKey === ''){
-                                $agentKey = substr(md5($value_full),0,8);
-                        }
-                        $agentLabelEsc = htmlspecialchars($agentDisplay, ENT_QUOTES, 'UTF-8');
-                        $agentKeyAttr = htmlspecialchars($agentKey, ENT_QUOTES, 'UTF-8');
-                        $directoryAttr = htmlspecialchars($value_full, ENT_QUOTES, 'UTF-8');
-        ?>
+        if (empty($rosterEntries)) {
+?>
+        <tr class="table_row table_row--empty">
+          <td colspan="6" class="table_cell--empty">
+            <div class="empty-roster">
+              <p class="empty-roster__title">No agents found.</p>
+              <p class="empty-roster__hint">Recordings will appear here once directories are available.</p>
+            </div>
+          </td>
+        </tr>
+<?php
+        } else {
+                foreach ($rosterEntries as $entry) {
+                        $agentDomId = htmlspecialchars($entry['domId'], ENT_QUOTES, 'UTF-8');
+                        $directoryAttr = htmlspecialchars($entry['directory'], ENT_QUOTES, 'UTF-8');
+                        $agentLabelEsc = htmlspecialchars($entry['displayName'], ENT_QUOTES, 'UTF-8');
+?>
         <tr class="table_row table_row--agent">
           <td class="table_cell--name">
             <span class="table_content__primary">
               <span class="icon-chip icon-chip--chevron" aria-hidden="true"><svg viewBox="0 0 24 24" role="presentation"><path fill="currentColor" d="m10.5 7.5 5 4.5-5 4.5a.75.75 0 0 1-1-.06.75.75 0 0 1 .06-1l3.63-3.27L9.56 8.56a.75.75 0 0 1 1-1.06Z"/></svg></span>
               <span class="icon-chip icon-chip--agent" aria-hidden="true"><svg viewBox="0 0 24 24" role="presentation"><path fill="currentColor" d="M12 13.25a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm0 1.5c-3.51 0-6.5 1.92-6.5 4.5a.75.75 0 0 0 .75.75h11.5a.75.75 0 0 0 .75-.75c0-2.58-2.99-4.5-6.5-4.5Z"/></svg></span>
-              <a href="javascript:void(0)" class="click table-link" role="button" rel="<?php echo $agentKeyAttr; ?>" subd="<?php echo $directoryAttr; ?>">
+              <a href="javascript:void(0)" class="click table-link" role="button" rel="<?php echo $agentDomId; ?>" subd="<?php echo $directoryAttr; ?>" data-agent="<?php echo $agentDomId; ?>" data-directory="<?php echo $directoryAttr; ?>" aria-controls="detail_<?php echo $agentDomId; ?>">
                 <span class="table-link__label"><?php echo $agentLabelEsc; ?></span>
                 <span class="table-link__hint">View recordings</span>
               </a>
@@ -171,15 +225,13 @@ $(document).ready(function(){
           <td class="table_cell--ghost" aria-hidden="true"></td>
           <td class="table_cell--ghost" aria-hidden="true"></td>
         </tr>
-        <tr class="detail-row" id="detail_<?php echo $agentKeyAttr; ?>">
+        <tr class="detail-row" id="detail_<?php echo $agentDomId; ?>">
           <td colspan="6">
-            <div id="show_<?php echo $agentKeyAttr; ?>" class="showfull" aria-live="polite"></div>
+            <div id="show_<?php echo $agentDomId; ?>" class="showfull" aria-live="polite"></div>
           </td>
         </tr>
-        <?php
+<?php
                 }
-                }
-        }
         }
 ?>
           </tbody>
@@ -203,6 +255,9 @@ $(document).ready(function(){
 	{
 		if (!in_array($value_full,array(".",".."))) 
 	 {
+		 if ($selectedAgentFilter !== '' && $selectedAgentFilter !== $value_full) {
+			 continue;
+		 }
 		 $select	=	"select first_name,last_name from dbo.cc_user where id='".ltrim($value_full,'0')."'";
 		$query	=	sqlsrv_query(connect,$select);
 		if($query==true){
