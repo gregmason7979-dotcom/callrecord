@@ -273,9 +273,10 @@ HTML;
                 function get_directories($user,$value_full)
                 {
                         $i = 0;
-                        $directory = maindirectory;
+                        $baseDirectory = rtrim(maindirectory, '/\\');
+                        $directory = $baseDirectory . DIRECTORY_SEPARATOR;
                         $print = '<table class="record-table record-table--detail">';
-                        $subdirectory = $directory.$value_full;
+                        $subdirectory = $baseDirectory . DIRECTORY_SEPARATOR . $value_full;
 
                         if (is_dir($subdirectory)) {
                                 $list = $this->Sort_Directory_Files_By_Last_Modified($subdirectory);
@@ -285,13 +286,13 @@ HTML;
                                                 continue;
                                         }
 
-                                        $agentPath = $directory.$value_full.'/'.$value['file'];
+                                        $agentPath = $subdirectory . DIRECTORY_SEPARATOR . $value['file'];
 
                                         if (is_dir($agentPath)) {
                                                 $ulist = $this->Sort_Directory_Files_By_Last_Modified($agentPath);
 
                                                 foreach ($ulist[0] as $uval) {
-                                                        $recordPath = $agentPath.'/'.$uval['file'];
+                                                        $recordPath = $agentPath . DIRECTORY_SEPARATOR . $uval['file'];
 
                                                         if (!is_file($recordPath)) {
                                                                 continue;

@@ -127,11 +127,24 @@ $(document).ready(function(){
           <tbody>
 <?php
 
+        $usedDomIds = array();
+        $seenAgentDirectories = array();
         foreach($list_full as $value_full)
         {
                 if (!in_array($value_full,array(".","..")))
          {
-                 $select        =       "select first_name,last_name from dbo.cc_user where id='".ltrim($value_full,'0')."'";
+                $agentIdForLookup = ltrim($value_full, '0');
+                if ($agentIdForLookup === '') {
+                        $agentIdForLookup = $value_full;
+                }
+
+                if (isset($seenAgentDirectories[$agentIdForLookup])) {
+                        continue;
+                }
+
+                $seenAgentDirectories[$agentIdForLookup] = true;
+
+                $select        =       "select first_name,last_name from dbo.cc_user where id='".$agentIdForLookup."'";
                 $query  =       sqlsrv_query(connect,$select);
                 if($query==true){
                 $result =       sqlsrv_fetch_array($query,SQLSRV_FETCH_ASSOC);
@@ -142,15 +155,21 @@ $(document).ready(function(){
                         if($agentDisplay === ''){
                                 $agentDisplay = $value_full;
                         }
-                        $agentKey = preg_replace('/[^A-Za-z0-9_-]/','',$firstName.$lastName);
-                        if($agentKey === ''){
-                                $agentKey = preg_replace('/[^A-Za-z0-9_-]/','',$value_full);
+
+                        $agentDomId = preg_replace('/[^A-Za-z0-9_-]/','',$value_full);
+                        if($agentDomId === ''){
+                                $agentDomId = substr(md5($value_full),0,8);
                         }
-                        if($agentKey === ''){
-                                $agentKey = substr(md5($value_full),0,8);
+                        $baseDomId = $agentDomId;
+                        $suffix = 2;
+                        while(isset($usedDomIds[$agentDomId])){
+                                $agentDomId = $baseDomId.'-'.$suffix;
+                                $suffix++;
                         }
+                        $usedDomIds[$agentDomId] = true;
+
                         $agentLabelEsc = htmlspecialchars($agentDisplay, ENT_QUOTES, 'UTF-8');
-                        $agentKeyAttr = htmlspecialchars($agentKey, ENT_QUOTES, 'UTF-8');
+                        $agentKeyAttr = htmlspecialchars($agentDomId, ENT_QUOTES, 'UTF-8');
                         $directoryAttr = htmlspecialchars($value_full, ENT_QUOTES, 'UTF-8');
         ?>
         <tr class="table_row table_row--agent">
