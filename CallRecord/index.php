@@ -59,21 +59,35 @@ $('#dummyspan_'+val).show();
 
 }
 $(document).ready(function(){
-	$('.click').click(function(){
+	$('.click').on('click', function(event){
+		event.preventDefault();
+
 		var name	=	$(this).attr('rel');
 		var direct	=	$(this).attr('subd');
 		var datastring = 'user='+name+'&directory='+direct+'&action=getdirectory';
+		var $detailRow = $('#detail_'+name);
+		var $targetContainer = $('#show_'+name);
+
+		$('.table_row--agent').removeClass('table_row--agent-active');
+		$(this).closest('.table_row').addClass('table_row--agent-active');
+
+		$('.detail-row').removeClass('detail-row--visible');
+		$detailRow.addClass('detail-row--visible');
+
+		$('.showfull').removeClass('showfull--visible').html('');
+
 		$.ajax({
 		type:'POST',
 		url:'process.php',
 		data:datastring,
 		success:function(response)
 		{
-			$('.showfull').html('');
-		$('#show_'+name).html(response);
+			$targetContainer.html(response).addClass('showfull--visible');
+		},
+		error:function(){
+			$targetContainer.html('<div class="showfull__error">Unable to load recordings.</div>').addClass('showfull--visible');
 		}
 		});
-		return false;	
 	});
 
 });
@@ -97,53 +111,80 @@ $(document).ready(function(){
 	$directory = rtrim(maindirectory, '/\\') . DIRECTORY_SEPARATOR;
 	if(!isset($_POST['action']))
 	{
-	$list_full = scandir($directory); 
-	?>
-        <table class="record-table">
-					   <tr class="table_top">
-							<th width="300">Agent Name</th>
-					        <th width="150">Other Parties</th>
-					        <th width="200">Date/Time</th>
-							<th>Service Group</th>
-							<th>Call ID</th>
-							<th>Description</th>
-					   </tr>
-	</table>
-	<?php
-	 
-	foreach($list_full as $value_full)
-	{
-		if (!in_array($value_full,array(".",".."))) 
-	 {
-		 $select	=	"select first_name,last_name from dbo.cc_user where id='".ltrim($value_full,'0')."'";
-		$query	=	sqlsrv_query(connect,$select);
-		if($query==true){
-		$result	=	sqlsrv_fetch_array($query,SQLSRV_FETCH_ASSOC);
-	?>
-        <table class="record-table">
-                <tr class="table_row table_row--agent">
-                  <td colspan="6" class="table_content">
-                    <span class="icon-chip icon-chip--chevron" aria-hidden="true"><svg viewBox="0 0 24 24" role="presentation"><path fill="currentColor" d="m10.5 7.5 5 4.5-5 4.5a.75.75 0 0 1-1-.06.75.75 0 0 1 .06-1l3.63-3.27L9.56 8.56a.75.75 0 0 1 1-1.06Z"/></svg></span>
-                    <span class="icon-chip icon-chip--agent" aria-hidden="true"><svg viewBox="0 0 24 24" role="presentation"><path fill="currentColor" d="M12 13.25a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm0 1.5c-3.51 0-6.5 1.92-6.5 4.5a.75.75 0 0 0 .75.75h11.5a.75.75 0 0 0 .75-.75c0-2.58-2.99-4.5-6.5-4.5Z"/></svg></span>
-                    <a href="javascript:void(0)" class="click table-link" role="button" rel="<?php echo $result['first_name'], $result['last_name'] ?>" subd="<?php echo $value_full; ?>">
-                      <span class="table-link__label"><?php echo $result['first_name'] ?> <?php echo $result['last_name']; ?></span>
-                      <span class="table-link__hint">View recordings</span>
-                    </a>
-                    <span class="table-link__chevron" aria-hidden="true"><svg viewBox="0 0 24 24" role="presentation"><path fill="currentColor" d="m9 6 6 6-6 6" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-                  </td>
-                </tr>
-
-                </table>
-                        <div id="show_<?php echo $result['first_name'], $result['last_name'] ?>" class="showfull">
-                        </div>
-				<?php
-					   } 
-					 
-		} 
-	} 
+	$list_full = scandir($directory);
 ?>
-		
-		<?php 
+        <table class="record-table record-table--roster">
+          <thead>
+                                           <tr class="table_top">
+                                                        <th width="300">Agent Name</th>
+                                                <th width="150">Other Parties</th>
+                                                <th width="200">Date/Time</th>
+                                                        <th>Service Group</th>
+                                                        <th>Call ID</th>
+                                                        <th>Description</th>
+                                           </tr>
+          </thead>
+          <tbody>
+<?php
+
+        foreach($list_full as $value_full)
+        {
+                if (!in_array($value_full,array(".","..")))
+         {
+                 $select        =       "select first_name,last_name from dbo.cc_user where id='".ltrim($value_full,'0')."'";
+                $query  =       sqlsrv_query(connect,$select);
+                if($query==true){
+                $result =       sqlsrv_fetch_array($query,SQLSRV_FETCH_ASSOC);
+                if($result){
+                        $firstName = isset($result['first_name']) ? $result['first_name'] : '';
+                        $lastName = isset($result['last_name']) ? $result['last_name'] : '';
+                        $agentDisplay = trim($firstName.' '.$lastName);
+                        if($agentDisplay === ''){
+                                $agentDisplay = $value_full;
+                        }
+                        $agentKey = preg_replace('/[^A-Za-z0-9_-]/','',$firstName.$lastName);
+                        if($agentKey === ''){
+                                $agentKey = preg_replace('/[^A-Za-z0-9_-]/','',$value_full);
+                        }
+                        if($agentKey === ''){
+                                $agentKey = substr(md5($value_full),0,8);
+                        }
+                        $agentLabelEsc = htmlspecialchars($agentDisplay, ENT_QUOTES, 'UTF-8');
+                        $agentKeyAttr = htmlspecialchars($agentKey, ENT_QUOTES, 'UTF-8');
+                        $directoryAttr = htmlspecialchars($value_full, ENT_QUOTES, 'UTF-8');
+        ?>
+        <tr class="table_row table_row--agent">
+          <td class="table_cell--name">
+            <span class="table_content__primary">
+              <span class="icon-chip icon-chip--chevron" aria-hidden="true"><svg viewBox="0 0 24 24" role="presentation"><path fill="currentColor" d="m10.5 7.5 5 4.5-5 4.5a.75.75 0 0 1-1-.06.75.75 0 0 1 .06-1l3.63-3.27L9.56 8.56a.75.75 0 0 1 1-1.06Z"/></svg></span>
+              <span class="icon-chip icon-chip--agent" aria-hidden="true"><svg viewBox="0 0 24 24" role="presentation"><path fill="currentColor" d="M12 13.25a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm0 1.5c-3.51 0-6.5 1.92-6.5 4.5a.75.75 0 0 0 .75.75h11.5a.75.75 0 0 0 .75-.75c0-2.58-2.99-4.5-6.5-4.5Z"/></svg></span>
+              <a href="javascript:void(0)" class="click table-link" role="button" rel="<?php echo $agentKeyAttr; ?>" subd="<?php echo $directoryAttr; ?>">
+                <span class="table-link__label"><?php echo $agentLabelEsc; ?></span>
+                <span class="table-link__hint">View recordings</span>
+              </a>
+            </span>
+            <span class="table-link__chevron" aria-hidden="true"><svg viewBox="0 0 24 24" role="presentation"><path fill="currentColor" d="m9 6 6 6-6 6" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          </td>
+          <td class="table_cell--ghost" aria-hidden="true"></td>
+          <td class="table_cell--ghost" aria-hidden="true"></td>
+          <td class="table_cell--ghost" aria-hidden="true"></td>
+          <td class="table_cell--ghost" aria-hidden="true"></td>
+          <td class="table_cell--ghost" aria-hidden="true"></td>
+        </tr>
+        <tr class="detail-row" id="detail_<?php echo $agentKeyAttr; ?>">
+          <td colspan="6">
+            <div id="show_<?php echo $agentKeyAttr; ?>" class="showfull" aria-live="polite"></div>
+          </td>
+        </tr>
+        <?php
+                }
+                }
+        }
+        }
+?>
+          </tbody>
+        </table>
+<?php
 }else{
 	$i=0;
 	$list_full = scandir($directory); 
