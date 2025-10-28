@@ -172,8 +172,11 @@ $(document).ready(function(){
                                  </div>
                                  <div class="content">
 <?php 
-	$directory = rtrim(maindirectory, '/\\') . DIRECTORY_SEPARATOR;
-	if(!isset($_POST['action']))
+        $directory = rtrim(maindirectory, '/\\') . DIRECTORY_SEPARATOR;
+        $selectedAgentFilter = (isset($_POST['agent']) && is_string($_POST['agent'])) ? $_POST['agent'] : '';
+        $actionType = (isset($_POST['action']) && is_string($_POST['action'])) ? $_POST['action'] : '';
+
+        if($actionType === '')
 	{
 	$rosterEntries = $model->getAgentRoster();
 ?>
