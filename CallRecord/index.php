@@ -172,12 +172,23 @@ $(document).ready(function(){
                                  </div>
                                  <div class="content">
 <?php 
-	$directory = rtrim(maindirectory, '/\\') . DIRECTORY_SEPARATOR;
-	if(!isset($_POST['action']))
+        $directory = rtrim(maindirectory, '/\\') . DIRECTORY_SEPARATOR;
+        $selectedAgentFilter = (isset($_POST['agent']) && is_string($_POST['agent'])) ? $_POST['agent'] : '';
+        $actionType = (isset($_POST['action']) && is_string($_POST['action'])) ? $_POST['action'] : '';
+
+        if($actionType === '')
 	{
 	$rosterEntries = $model->getAgentRoster();
 ?>
         <table class="record-table record-table--roster">
+          <colgroup>
+            <col class="record-col record-col--agent">
+            <col class="record-col record-col--other">
+            <col class="record-col record-col--datetime">
+            <col class="record-col record-col--group">
+            <col class="record-col record-col--call">
+            <col class="record-col record-col--description">
+          </colgroup>
           <thead>
                                            <tr class="table_top">
                                                         <th width="300">Agent Name</th>
