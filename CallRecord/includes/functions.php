@@ -168,13 +168,24 @@
                 private function buildDownloadHref(array $segments, $downloadName)
                 {
                         $cleanSegments = $this->prepareRecordingSegments($segments);
-                        $relativePath = implode('/', $cleanSegments);
 
-                        if ($relativePath === '') {
+                        if (empty($cleanSegments)) {
                                 return '#';
                         }
 
                         $safeName = basename($downloadName);
+                        $publicUrl = $this->buildPublicRecordingUrl($segments);
+
+                        if ($publicUrl !== '') {
+                                $query = http_build_query(array(
+                                        'download' => $publicUrl,
+                                        'filename' => $safeName,
+                                ));
+
+                                return 'index.php?' . $query;
+                        }
+
+                        $relativePath = implode('/', $cleanSegments);
 
                         $query = http_build_query(array(
                                 'download' => $relativePath,
@@ -318,9 +329,8 @@
                         $onclick = htmlspecialchars('DHTMLSound('.$playArgument.','.$index.')', ENT_QUOTES, 'UTF-8');
 
                         return <<<HTML
-                                  <tr class="table_row">
-
-                                   <td width="300" class="record-actions">
+                                  <tr class="table_row table_row--detail">
+                                   <td class="record-cell record-cell--actions">
                                      <div class="action-toolbar">
                                        <a href="javascript:void(0)" class="action-icon action-icon--play" onclick="{$onclick}">
                                          <span class="sr-only">Play recording</span>
@@ -334,11 +344,11 @@
                                      </div>
                                      <div id="dummyspan_{$index}" class="dummyspan" aria-live="polite"></div>
                                    </td>
-                                   <td width="150">{$otherpartyEsc}</td>
-                                   <td width="200">{$dateEsc}</td>
-                                   <td><span class="record-pill record-pill--group">{$serviceEsc}</span></td>
-                                   <td><span class="record-pill record-pill--id">{$callEsc}</span></td>
-                                   <td>{$descriptionEsc}</td>
+                                   <td class="record-cell record-cell--other">{$otherpartyEsc}</td>
+                                   <td class="record-cell record-cell--datetime">{$dateEsc}</td>
+                                   <td class="record-cell record-cell--group"><span class="record-pill record-pill--group">{$serviceEsc}</span></td>
+                                   <td class="record-cell record-cell--call"><span class="record-pill record-pill--id">{$callEsc}</span></td>
+                                   <td class="record-cell record-cell--description">{$descriptionEsc}</td>
                                   </tr>
 HTML;
                 }
@@ -475,8 +485,7 @@ HTML;
 
                         if ($totalRecords === 0) {
                                 if ($scope === 'recent') {
-                                        $print .= '<div class="recording-panel__empty">No recordings found in the last 14 days.<br><span>please use the search function to find recordings older than 14 days.</span></div>';
-                                        $print .= '<div class="recording-panel__actions"><button type="button" class="recording-panel__toggle" data-role="show-all" data-scope="all" data-agent="' . $agentAttr . '" data-directory="' . $directoryAttr . '">View all recordings</button></div>';
+                                        $print .= '<div class="recording-panel__empty">No recordings found in the last 14 days.</div>';
                                 } else {
                                         $print .= '<div class="recording-panel__empty">No recordings available.</div>';
                                 }
@@ -504,6 +513,8 @@ HTML;
 
                         $print .= '<p class="recording-panel__meta">Showing ' . $rangeStart . '&ndash;' . $rangeEnd . ' of ' . $totalRecords . ' recordings</p>';
                         $print .= '<table class="record-table record-table--detail">';
+
+                        $print .= '<colgroup><col class="record-col record-col--actions"><col class="record-col record-col--other"><col class="record-col record-col--datetime"><col class="record-col record-col--group"><col class="record-col record-col--call"><col class="record-col record-col--description"></colgroup>';
 
                         foreach ($pageRecords as $index => $record) {
                                 $rowIndex = $index + 1;
