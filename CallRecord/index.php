@@ -172,12 +172,23 @@ $(document).ready(function(){
                                  </div>
                                  <div class="content">
 <?php 
-	$directory = rtrim(maindirectory, '/\\') . DIRECTORY_SEPARATOR;
-	if(!isset($_POST['action']))
+        $directory = rtrim(maindirectory, '/\\') . DIRECTORY_SEPARATOR;
+        $selectedAgentFilter = (isset($_POST['agent']) && is_string($_POST['agent'])) ? $_POST['agent'] : '';
+        $actionType = (isset($_POST['action']) && is_string($_POST['action'])) ? $_POST['action'] : '';
+
+        if($actionType === '')
 	{
 	$rosterEntries = $model->getAgentRoster();
 ?>
         <table class="record-table record-table--roster">
+          <colgroup>
+            <col class="record-col record-col--agent">
+            <col class="record-col record-col--other">
+            <col class="record-col record-col--datetime">
+            <col class="record-col record-col--group">
+            <col class="record-col record-col--call">
+            <col class="record-col record-col--description">
+          </colgroup>
           <thead>
                                            <tr class="table_top">
                                                         <th width="300">Agent Name</th>
@@ -209,15 +220,17 @@ $(document).ready(function(){
 ?>
         <tr class="table_row table_row--agent">
           <td class="table_cell--name">
-            <span class="table_content__primary">
-              <span class="icon-chip icon-chip--chevron" aria-hidden="true"><svg viewBox="0 0 24 24" role="presentation"><path fill="currentColor" d="m10.5 7.5 5 4.5-5 4.5a.75.75 0 0 1-1-.06.75.75 0 0 1 .06-1l3.63-3.27L9.56 8.56a.75.75 0 0 1 1-1.06Z"/></svg></span>
-              <span class="icon-chip icon-chip--agent" aria-hidden="true"><svg viewBox="0 0 24 24" role="presentation"><path fill="currentColor" d="M12 13.25a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm0 1.5c-3.51 0-6.5 1.92-6.5 4.5a.75.75 0 0 0 .75.75h11.5a.75.75 0 0 0 .75-.75c0-2.58-2.99-4.5-6.5-4.5Z"/></svg></span>
-              <a href="javascript:void(0)" class="click table-link" role="button" rel="<?php echo $agentDomId; ?>" subd="<?php echo $directoryAttr; ?>" data-agent="<?php echo $agentDomId; ?>" data-directory="<?php echo $directoryAttr; ?>" aria-controls="detail_<?php echo $agentDomId; ?>">
-                <span class="table-link__label"><?php echo $agentLabelEsc; ?></span>
-                <span class="table-link__hint">View recordings</span>
-              </a>
-            </span>
-            <span class="table-link__chevron" aria-hidden="true"><svg viewBox="0 0 24 24" role="presentation"><path fill="currentColor" d="m9 6 6 6-6 6" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            <a href="javascript:void(0)" class="click table-link" role="button" rel="<?php echo $agentDomId; ?>" subd="<?php echo $directoryAttr; ?>" data-agent="<?php echo $agentDomId; ?>" data-directory="<?php echo $directoryAttr; ?>" aria-controls="detail_<?php echo $agentDomId; ?>">
+              <span class="table_content__primary">
+                <span class="icon-chip icon-chip--chevron" aria-hidden="true"><svg viewBox="0 0 24 24" role="presentation"><path fill="currentColor" d="m10.5 7.5 5 4.5-5 4.5a.75.75 0 0 1-1-.06.75.75 0 0 1 .06-1l3.63-3.27L9.56 8.56a.75.75 0 0 1 1-1.06Z"/></svg></span>
+                <span class="icon-chip icon-chip--agent" aria-hidden="true"><svg viewBox="0 0 24 24" role="presentation"><path fill="currentColor" d="M12 13.25a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm0 1.5c-3.51 0-6.5 1.92-6.5 4.5a.75.75 0 0 0 .75.75h11.5a.75.75 0 0 0 .75-.75c0-2.58-2.99-4.5-6.5-4.5Z"/></svg></span>
+                <span class="table-link__text">
+                  <span class="table-link__label"><?php echo $agentLabelEsc; ?></span>
+                  <span class="table-link__hint">View recordings</span>
+                </span>
+              </span>
+              <span class="table-link__chevron" aria-hidden="true"><svg viewBox="0 0 24 24" role="presentation"><path fill="currentColor" d="m9 6 6 6-6 6" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            </a>
           </td>
           <td class="table_cell--ghost" aria-hidden="true"></td>
           <td class="table_cell--ghost" aria-hidden="true"></td>
