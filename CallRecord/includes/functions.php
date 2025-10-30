@@ -22,62 +22,39 @@
 
                 public function getAgentRoster()
                 {
-                        $directory = rtrim(maindirectory, '/\\');
+                        $sql = "SELECT id, first_name, last_name FROM dbo.cc_user WHERE delete_date > GETDATE()";
+                        $query = sqlsrv_query(connect, $sql);
 
-                        if ($directory === '' || !is_dir($directory)) {
+                        if ($query === false) {
                                 return array();
                         }
 
                         $roster = array();
                         $usedDomIds = array();
-                        $seenAgentDirectories = array();
-                        $listFull = scandir($directory);
 
-                        foreach ($listFull as $valueFull) {
-                                if (in_array($valueFull, array('.', '..'))) {
+                        while ($row = sqlsrv_fetch_array($query, SQLSRV_FETCH_ASSOC)) {
+                                if (!isset($row['id'])) {
                                         continue;
                                 }
 
-                                $fullPath = $directory . DIRECTORY_SEPARATOR . $valueFull;
+                                $rawId = (string) $row['id'];
 
-                                if (!is_dir($fullPath)) {
+                                if ($rawId === '') {
                                         continue;
                                 }
 
-                                $agentIdForLookup = ltrim($valueFull, '0');
-                                if ($agentIdForLookup === '') {
-                                        $agentIdForLookup = $valueFull;
+                                $firstName = isset($row['first_name']) ? trim($row['first_name']) : '';
+                                $lastName = isset($row['last_name']) ? trim($row['last_name']) : '';
+                                $display = trim($firstName . ' ' . $lastName);
+
+                                if ($display === '') {
+                                        $display = $rawId;
                                 }
 
-                                if (isset($seenAgentDirectories[$agentIdForLookup])) {
-                                        continue;
-                                }
-
-                                $seenAgentDirectories[$agentIdForLookup] = true;
-
-                                $select = "select first_name,last_name from dbo.cc_user where id='" . $agentIdForLookup . "'";
-                                $query = sqlsrv_query(connect, $select);
-                                $agentDisplay = $valueFull;
-                                $result = false;
-
-                                if ($query !== false) {
-                                        $result = sqlsrv_fetch_array($query, SQLSRV_FETCH_ASSOC);
-                                }
-
-                                if ($result) {
-                                        $firstName = isset($result['first_name']) ? $result['first_name'] : '';
-                                        $lastName = isset($result['last_name']) ? $result['last_name'] : '';
-                                        $agentDisplay = trim($firstName . ' ' . $lastName);
-
-                                        if ($agentDisplay === '') {
-                                                $agentDisplay = $valueFull;
-                                        }
-                                }
-
-                                $agentDomId = preg_replace('/[^A-Za-z0-9_-]/', '', $valueFull);
+                                $agentDomId = preg_replace('/[^A-Za-z0-9_-]/', '', $rawId);
 
                                 if ($agentDomId === '') {
-                                        $agentDomId = substr(md5($valueFull), 0, 8);
+                                        $agentDomId = substr(md5($rawId), 0, 8);
                                 }
 
                                 $baseDomId = $agentDomId;
@@ -92,11 +69,13 @@
 
                                 $roster[] = array(
                                         'domId' => $agentDomId,
-                                        'directory' => $valueFull,
-                                        'displayName' => $agentDisplay,
-                                        'agentId' => $agentIdForLookup,
+                                        'directory' => $rawId,
+                                        'displayName' => $display,
+                                        'agentId' => $rawId,
                                 );
                         }
+
+                        sqlsrv_free_stmt($query);
 
                         return $roster;
                 }
@@ -168,13 +147,24 @@
                 private function buildDownloadHref(array $segments, $downloadName)
                 {
                         $cleanSegments = $this->prepareRecordingSegments($segments);
-                        $relativePath = implode('/', $cleanSegments);
 
-                        if ($relativePath === '') {
+                        if (empty($cleanSegments)) {
                                 return '#';
                         }
 
                         $safeName = basename($downloadName);
+                        $publicUrl = $this->buildPublicRecordingUrl($segments);
+
+                        if ($publicUrl !== '') {
+                                $query = http_build_query(array(
+                                        'download' => $publicUrl,
+                                        'filename' => $safeName,
+                                ));
+
+                                return 'index.php?' . $query;
+                        }
+
+                        $relativePath = implode('/', $cleanSegments);
 
                         $query = http_build_query(array(
                                 'download' => $relativePath,
@@ -183,61 +173,91 @@
 
                         return 'index.php?' . $query;
                 }
+
+                private function extractTimestampFromFilename($filename)
+                {
+                        $parts = explode('$', $filename);
+
+                        if (count($parts) < 2) {
+                                return null;
+                        }
+
+                        $candidate = $parts[1];
+
+                        if (!preg_match('/^\d{14}$/', $candidate)) {
+                                return null;
+                        }
+
+                        $date = \DateTime::createFromFormat('YmdHis', $candidate);
+
+                        if ($date === false) {
+                                return null;
+                        }
+
+                        return $date->getTimestamp();
+                }
 		function logout()
 		{
 			unset($_SESSION['username']);
 			unset($_SESSION['login']);
 			$this->redirect('login.php');
 		}
-		function Sort_Directory_Files_By_Last_Modified($dir, $sort_type = 'descending', $date_format = "F d Y H:i:s")
-		{
-			$files = scandir($dir);
+                function Sort_Directory_Files_By_Last_Modified($dir, $sort_type = 'descending', $date_format = "F d Y H:i:s")
+                {
+                        $files = scandir($dir);
 
-			$array = array();
-		
-			foreach($files as $file)
-			{
-									if($file != '.' && $file != '..')
-						{
-							$now = time();
-							$last_modified = filemtime($dir.'/'.$file);
-						  
-							$time_passed_array = array();
+                        $array = array();
 
-							$diff = $now - $last_modified;
+                        foreach($files as $file)
+                        {
+                                                                if($file != '.' && $file != '..')
+                                                {
+                                                        $now = time();
+                                                        $fullPath = $dir . DIRECTORY_SEPARATOR . $file;
+                                                        $last_modified = $this->extractTimestampFromFilename($file);
 
-							$days = floor($diff / (3600 * 24));
+                                                        if ($last_modified === null) {
+                                                                $last_modified = @filemtime($fullPath);
+                                                        }
 
-							if($days)
-							{
-							$time_passed_array['days'] = $days;
-							}
+                                                        $time_passed_array = array();
 
-							$diff = $diff - ($days * 3600 * 24);
+                                                        if (is_int($last_modified) && $last_modified > 0) {
+                                                                $diff = $now - $last_modified;
 
-							$hours = floor($diff / 3600);
+                                                                $days = floor($diff / (3600 * 24));
 
-							if($hours)
-							{
-							$time_passed_array['hours'] = $hours;
-							}
+                                                                if($days)
+                                                                {
+                                                                $time_passed_array['days'] = $days;
+                                                                }
 
-							$diff = $diff - (3600 * $hours);
+                                                                $diff = $diff - ($days * 3600 * 24);
 
-							$minutes = floor($diff / 60);
+                                                                $hours = floor($diff / 3600);
 
-							if($minutes)
-							{
-							$time_passed_array['minutes'] = $minutes;
-							}
+                                                                if($hours)
+                                                                {
+                                                                $time_passed_array['hours'] = $hours;
+                                                                }
 
-							$seconds = $diff - ($minutes * 60);
+                                                                $diff = $diff - (3600 * $hours);
 
-							$time_passed_array['seconds'] = $seconds;
+                                                                $minutes = floor($diff / 60);
+
+                                                                if($minutes)
+                                                                {
+                                                                $time_passed_array['minutes'] = $minutes;
+                                                                }
+
+                                                                $seconds = $diff - ($minutes * 60);
+
+                                                                $time_passed_array['seconds'] = $seconds;
+                                                        }
 
                     $array[] = array('file'         => $file,
-                                                             'timestamp'    => $last_modified,
-                                                             'date'         => date ($date_format, $last_modified),
+                                                             'timestamp'    => is_int($last_modified) ? $last_modified : null,
+                                                             'date'         => is_int($last_modified) ? date ($date_format, $last_modified) : '',
                                                              'time_passed'  => $time_passed_array);
                     }
                 }
@@ -318,9 +338,8 @@
                         $onclick = htmlspecialchars('DHTMLSound('.$playArgument.','.$index.')', ENT_QUOTES, 'UTF-8');
 
                         return <<<HTML
-                                  <tr class="table_row">
-
-                                   <td width="300" class="record-actions">
+                                  <tr class="table_row table_row--detail">
+                                   <td class="record-cell record-cell--actions">
                                      <div class="action-toolbar">
                                        <a href="javascript:void(0)" class="action-icon action-icon--play" onclick="{$onclick}">
                                          <span class="sr-only">Play recording</span>
@@ -334,11 +353,11 @@
                                      </div>
                                      <div id="dummyspan_{$index}" class="dummyspan" aria-live="polite"></div>
                                    </td>
-                                   <td width="150">{$otherpartyEsc}</td>
-                                   <td width="200">{$dateEsc}</td>
-                                   <td><span class="record-pill record-pill--group">{$serviceEsc}</span></td>
-                                   <td><span class="record-pill record-pill--id">{$callEsc}</span></td>
-                                   <td>{$descriptionEsc}</td>
+                                   <td class="record-cell record-cell--other">{$otherpartyEsc}</td>
+                                   <td class="record-cell record-cell--datetime">{$dateEsc}</td>
+                                   <td class="record-cell record-cell--group"><span class="record-pill record-pill--group">{$serviceEsc}</span></td>
+                                   <td class="record-cell record-cell--call"><span class="record-pill record-pill--id">{$callEsc}</span></td>
+                                   <td class="record-cell record-cell--description">{$descriptionEsc}</td>
                                   </tr>
 HTML;
                 }
@@ -368,7 +387,22 @@ HTML;
                                         }
 
                                         $agentPath = $subdirectory . DIRECTORY_SEPARATOR . $value['file'];
-                                        $timestamp = isset($value['timestamp']) ? (int) $value['timestamp'] : @filemtime($agentPath);
+                                        $timestamp = null;
+
+                                        if (isset($value['timestamp']) && is_int($value['timestamp'])) {
+                                                $timestamp = $value['timestamp'];
+                                        } else {
+                                                $timestamp = $this->extractTimestampFromFilename($value['file']);
+
+                                                if ($timestamp === null) {
+                                                        $timestamp = @filemtime($agentPath);
+                                                        if ($timestamp !== false) {
+                                                                $timestamp = (int) $timestamp;
+                                                        } else {
+                                                                $timestamp = null;
+                                                        }
+                                                }
+                                        }
 
                                         if (is_dir($agentPath)) {
                                                 $ulist = $this->Sort_Directory_Files_By_Last_Modified($agentPath);
@@ -380,9 +414,25 @@ HTML;
                                                                 continue;
                                                         }
 
-                                                        $fileTimestamp = isset($uval['timestamp']) ? (int) $uval['timestamp'] : @filemtime($recordPath);
+                                                        $fileTimestamp = null;
 
-                                                        if ($scope === 'recent' && $fileTimestamp !== false && $fileTimestamp < $recentCutoff) {
+                                                        if (isset($uval['timestamp']) && is_int($uval['timestamp'])) {
+                                                                $fileTimestamp = $uval['timestamp'];
+                                                        } else {
+                                                                $fileTimestamp = $this->extractTimestampFromFilename($uval['file']);
+
+                                                                if ($fileTimestamp === null) {
+                                                                        $fileTimestamp = @filemtime($recordPath);
+
+                                                                        if ($fileTimestamp !== false) {
+                                                                                $fileTimestamp = (int) $fileTimestamp;
+                                                                        } else {
+                                                                                $fileTimestamp = null;
+                                                                        }
+                                                                }
+                                                        }
+
+                                                        if ($scope === 'recent' && $fileTimestamp !== null && $fileTimestamp < $recentCutoff) {
                                                                 continue;
                                                         }
 
@@ -410,7 +460,7 @@ HTML;
                                                                 'servicegroup' => $uservicegroup,
                                                                 'callId' => $ucallId,
                                                                 'description' => $udescription,
-                                                                'timestamp' => ($fileTimestamp !== false) ? $fileTimestamp : null,
+                                                                'timestamp' => $fileTimestamp,
                                                         );
                                                 }
                                         }
@@ -421,7 +471,7 @@ HTML;
                                                 continue;
                                         }
 
-                                        if ($scope === 'recent' && $timestamp !== false && $timestamp < $recentCutoff) {
+                                        if ($scope === 'recent' && $timestamp !== null && $timestamp < $recentCutoff) {
                                                 continue;
                                         }
 
@@ -449,7 +499,7 @@ HTML;
                                                 'servicegroup' => $servicegroup,
                                                 'callId' => $callId,
                                                 'description' => $description,
-                                                'timestamp' => ($timestamp !== false) ? $timestamp : null,
+                                                'timestamp' => $timestamp,
                                         );
                                 }
                         }
@@ -475,8 +525,7 @@ HTML;
 
                         if ($totalRecords === 0) {
                                 if ($scope === 'recent') {
-                                        $print .= '<div class="recording-panel__empty">No recordings found in the last 14 days.<br><span>please use the search function to find recordings older than 14 days.</span></div>';
-                                        $print .= '<div class="recording-panel__actions"><button type="button" class="recording-panel__toggle" data-role="show-all" data-scope="all" data-agent="' . $agentAttr . '" data-directory="' . $directoryAttr . '">View all recordings</button></div>';
+                                        $print .= '<div class="recording-panel__empty">No recordings found in the last 14 days.</div>';
                                 } else {
                                         $print .= '<div class="recording-panel__empty">No recordings available.</div>';
                                 }
@@ -504,6 +553,8 @@ HTML;
 
                         $print .= '<p class="recording-panel__meta">Showing ' . $rangeStart . '&ndash;' . $rangeEnd . ' of ' . $totalRecords . ' recordings</p>';
                         $print .= '<table class="record-table record-table--detail">';
+
+                        $print .= '<colgroup><col class="record-col record-col--actions"><col class="record-col record-col--other"><col class="record-col record-col--datetime"><col class="record-col record-col--group"><col class="record-col record-col--call"><col class="record-col record-col--description"></colgroup>';
 
                         foreach ($pageRecords as $index => $record) {
                                 $rowIndex = $index + 1;
