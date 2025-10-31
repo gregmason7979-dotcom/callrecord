@@ -2,12 +2,13 @@
 include('includes/header.php');
 if(!isset($_SESSION['login'])){ $model->redirect('login.php');}
 $agentOptions = $model->getAgentRoster();
+$serviceGroupOptions = $model->getServiceGroups();
 $selectedAgent = isset($_POST['agent']) ? $_POST['agent'] : '';
 $descriptionValue = isset($_POST['name']) ? htmlspecialchars($_POST['name'], ENT_QUOTES, 'UTF-8') : '';
 $dateStartValue = isset($_POST['date']) ? htmlspecialchars($_POST['date'], ENT_QUOTES, 'UTF-8') : '';
 $dateEndValue = isset($_POST['enddate']) ? htmlspecialchars($_POST['enddate'], ENT_QUOTES, 'UTF-8') : '';
 $otherPartyValue = isset($_POST['other_party']) ? htmlspecialchars($_POST['other_party'], ENT_QUOTES, 'UTF-8') : '';
-$serviceGroupValue = isset($_POST['service_group']) ? htmlspecialchars($_POST['service_group'], ENT_QUOTES, 'UTF-8') : '';
+$selectedServiceGroup = isset($_POST['service_group']) ? $_POST['service_group'] : '';
 $callIdValue = isset($_POST['call_id']) ? htmlspecialchars($_POST['call_id'], ENT_QUOTES, 'UTF-8') : '';
 ?>
 <link rel="stylesheet" href="ui/1.11.2/themes/base/jquery-ui.css">
@@ -62,7 +63,20 @@ $(function() {
           </label>
           <label class="search-field">
             <span class="search-field__label">Service group</span>
-            <input type="text" name="service_group" class="search-field__control" value="<?php echo $serviceGroupValue; ?>" placeholder="Queue or team" />
+            <select name="service_group" id="service-group-select" class="search-field__control">
+              <option value="">All service groups</option>
+              <?php foreach ($serviceGroupOptions as $group) {
+                        $groupName = isset($group['name']) ? $group['name'] : '';
+                        if ($groupName === '') {
+                                continue;
+                        }
+                        $groupNameEsc = htmlspecialchars($groupName, ENT_QUOTES, 'UTF-8');
+                        $isSelected = ($selectedServiceGroup !== '' && $selectedServiceGroup === $groupName) ? ' selected' : '';
+                        $dataId = isset($group['id']) && $group['id'] !== null ? ' data-id="' . htmlspecialchars((string) $group['id'], ENT_QUOTES, 'UTF-8') . '"' : '';
+              ?>
+              <option value="<?php echo $groupNameEsc; ?>"<?php echo $isSelected . $dataId; ?>><?php echo $groupNameEsc; ?></option>
+              <?php } ?>
+            </select>
           </label>
           <label class="search-field">
             <span class="search-field__label">Call ID</span>
