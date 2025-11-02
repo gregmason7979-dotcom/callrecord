@@ -410,6 +410,163 @@
                         return true;
                 }
 
+                private function collectAgentRecordings($directoryName, $scope, $recentCutoff, $page, $perPage)
+                {
+                        $baseDirectory = rtrim(maindirectory, '/\\');
+                        $agentRoot = $baseDirectory . DIRECTORY_SEPARATOR . $directoryName;
+
+                        if (!is_dir($agentRoot)) {
+                                return array('records' => array(), 'total' => 0);
+                        }
+
+                        $offset = ($page - 1) * $perPage;
+
+                        if ($offset < 0) {
+                                $offset = 0;
+                        }
+
+                        $heapLimit = $offset + $perPage;
+
+                        if ($heapLimit < $perPage) {
+                                $heapLimit = $perPage;
+                        }
+
+                        $heap = new class extends \SplMinHeap {
+                                protected function compare($value1, $value2)
+                                {
+                                        if ($value1['priority'] === $value2['priority']) {
+                                                return 0;
+                                        }
+
+                                        return ($value1['priority'] < $value2['priority']) ? -1 : 1;
+                                }
+                        };
+
+                        $totalMatches = 0;
+                        $baseLength = strlen($baseDirectory) + 1;
+
+                        $iterator = new \RecursiveIteratorIterator(
+                                new \RecursiveDirectoryIterator(
+                                        $agentRoot,
+                                        \FilesystemIterator::SKIP_DOTS
+                                ),
+                                \RecursiveIteratorIterator::SELF_FIRST
+                        );
+
+                        foreach ($iterator as $info) {
+                                if (!$info->isFile()) {
+                                        continue;
+                                }
+
+                                $filename = $info->getFilename();
+                                $timestamp = $this->extractTimestampFromFilename($filename);
+
+                                if ($timestamp === null) {
+                                        $fileTimestamp = @filemtime($info->getPathname());
+
+                                        if ($fileTimestamp !== false) {
+                                                $timestamp = (int) $fileTimestamp;
+                                        }
+                                }
+
+                                if ($scope === 'recent' && $timestamp !== null && $timestamp < $recentCutoff) {
+                                        continue;
+                                }
+
+                                $parts = explode('$', $filename);
+
+                                if (count($parts) < 5) {
+                                        continue;
+                                }
+
+                                $servicegroup = $parts[0];
+                                $datetime = $parts[1];
+                                $otherparty = $parts[2];
+                                $description = $parts[3];
+                                $callParts = explode('.', $parts[4]);
+                                $callId = $callParts[0];
+
+                                if (!$this->recordingMatchesFilters($datetime, $description, $otherparty, $servicegroup, $callId)) {
+                                        continue;
+                                }
+
+                                $fullPath = $info->getPathname();
+                                $relativePath = substr($fullPath, $baseLength);
+
+                                if ($relativePath === false || $relativePath === '') {
+                                        continue;
+                                }
+
+                                $rawSegments = preg_split('/[\\\\\/]+/', $relativePath);
+                                $segments = $this->prepareRecordingSegments($rawSegments);
+
+                                if (empty($segments)) {
+                                        continue;
+                                }
+
+                                $totalMatches++;
+
+                                $record = array(
+                                        'segments' => $segments,
+                                        'downloadName' => $filename,
+                                        'otherparty' => $otherparty,
+                                        'datetime' => $datetime,
+                                        'servicegroup' => $servicegroup,
+                                        'callId' => $callId,
+                                        'description' => $description,
+                                        'timestamp' => $timestamp,
+                                );
+
+                                if ($heapLimit <= 0) {
+                                        continue;
+                                }
+
+                                $priority = ($timestamp !== null) ? (int) $timestamp : PHP_INT_MIN;
+
+                                if ($heap->count() < $heapLimit) {
+                                        $heap->insert(array('priority' => $priority, 'record' => $record));
+                                        continue;
+                                }
+
+                                $top = $heap->top();
+
+                                if ($priority > $top['priority']) {
+                                        $heap->extract();
+                                        $heap->insert(array('priority' => $priority, 'record' => $record));
+                                }
+                        }
+
+                        $collected = array();
+                        $heapClone = clone $heap;
+
+                        while (!$heapClone->isEmpty()) {
+                                $collected[] = $heapClone->extract();
+                        }
+
+                        if (!empty($collected)) {
+                                usort($collected, static function ($a, $b) {
+                                        if ($a['priority'] === $b['priority']) {
+                                                return 0;
+                                        }
+
+                                        return ($a['priority'] < $b['priority']) ? 1 : -1;
+                                });
+                        }
+
+                        $records = array();
+
+                        foreach ($collected as $item) {
+                                $records[] = $item['record'];
+                        }
+
+                        $pageRecords = array_slice($records, $offset, $perPage);
+
+                        return array(
+                                'records' => $pageRecords,
+                                'total' => $totalMatches,
+                        );
+                }
+
                 public function renderRecordingRow($index, array $pathSegments, $downloadName, $otherparty, $datetime, $servicegroup, $callId, $description)
                 {
                         $playUrl = $this->buildPublicRecordingUrl($pathSegments);
@@ -466,137 +623,9 @@ HTML;
                         $perPage = 20;
                         $recentCutoff = strtotime('-14 days');
 
-                        $baseDirectory = rtrim(maindirectory, '/\\');
-                        $recordings = array();
-                        $subdirectory = $baseDirectory . DIRECTORY_SEPARATOR . $value_full;
-
-                        if (is_dir($subdirectory)) {
-                                $list = $this->Sort_Directory_Files_By_Last_Modified($subdirectory);
-
-                                foreach ($list[0] as $value) {
-                                        if (in_array($value['file'], array(".",".."))) {
-                                                continue;
-                                        }
-
-                                        $agentPath = $subdirectory . DIRECTORY_SEPARATOR . $value['file'];
-                                        $timestamp = null;
-
-                                        if (isset($value['timestamp']) && is_int($value['timestamp'])) {
-                                                $timestamp = $value['timestamp'];
-                                        } else {
-                                                $timestamp = $this->extractTimestampFromFilename($value['file']);
-
-                                                if ($timestamp === null) {
-                                                        $timestamp = @filemtime($agentPath);
-                                                        if ($timestamp !== false) {
-                                                                $timestamp = (int) $timestamp;
-                                                        } else {
-                                                                $timestamp = null;
-                                                        }
-                                                }
-                                        }
-
-                                        if (is_dir($agentPath)) {
-                                                $ulist = $this->Sort_Directory_Files_By_Last_Modified($agentPath);
-
-                                                foreach ($ulist[0] as $uval) {
-                                                        $recordPath = $agentPath . DIRECTORY_SEPARATOR . $uval['file'];
-
-                                                        if (!is_file($recordPath)) {
-                                                                continue;
-                                                        }
-
-                                                        $fileTimestamp = null;
-
-                                                        if (isset($uval['timestamp']) && is_int($uval['timestamp'])) {
-                                                                $fileTimestamp = $uval['timestamp'];
-                                                        } else {
-                                                                $fileTimestamp = $this->extractTimestampFromFilename($uval['file']);
-
-                                                                if ($fileTimestamp === null) {
-                                                                        $fileTimestamp = @filemtime($recordPath);
-
-                                                                        if ($fileTimestamp !== false) {
-                                                                                $fileTimestamp = (int) $fileTimestamp;
-                                                                        } else {
-                                                                                $fileTimestamp = null;
-                                                                        }
-                                                                }
-                                                        }
-
-                                                        if ($scope === 'recent' && $fileTimestamp !== null && $fileTimestamp < $recentCutoff) {
-                                                                continue;
-                                                        }
-
-                                                        $uexplode = explode('$', $uval['file']);
-                                                        if (count($uexplode) < 5) {
-                                                                continue;
-                                                        }
-
-                                                        $uservicegroup = $uexplode[0];
-                                                        $udatetime = $uexplode[1];
-                                                        $uotherparty = $uexplode[2];
-                                                        $udescription = $uexplode[3];
-                                                        $ucall = explode('.', $uexplode[4]);
-                                                        $ucallId = $ucall[0];
-
-                                                        if (!$this->recordingMatchesFilters($udatetime, $udescription, $uotherparty, $uservicegroup, $ucallId)) {
-                                                                continue;
-                                                        }
-
-                                                        $recordings[] = array(
-                                                                'segments' => array($value_full, $value['file'], $uval['file']),
-                                                                'downloadName' => $uval['file'],
-                                                                'otherparty' => $uotherparty,
-                                                                'datetime' => $udatetime,
-                                                                'servicegroup' => $uservicegroup,
-                                                                'callId' => $ucallId,
-                                                                'description' => $udescription,
-                                                                'timestamp' => $fileTimestamp,
-                                                        );
-                                                }
-                                        }
-
-                                        $recordPath = $agentPath;
-
-                                        if (!is_file($recordPath)) {
-                                                continue;
-                                        }
-
-                                        if ($scope === 'recent' && $timestamp !== null && $timestamp < $recentCutoff) {
-                                                continue;
-                                        }
-
-                                        $explode = explode('$', $value['file']);
-                                        if (count($explode) < 5) {
-                                                continue;
-                                        }
-
-                                        $servicegroup = $explode[0];
-                                        $datetime = $explode[1];
-                                        $otherparty = $explode[2];
-                                        $description = $explode[3];
-                                        $call = explode('.', $explode[4]);
-                                        $callId = $call[0];
-
-                                        if (!$this->recordingMatchesFilters($datetime, $description, $otherparty, $servicegroup, $callId)) {
-                                                continue;
-                                        }
-
-                                        $recordings[] = array(
-                                                'segments' => array($value_full, $value['file']),
-                                                'downloadName' => $value['file'],
-                                                'otherparty' => $otherparty,
-                                                'datetime' => $datetime,
-                                                'servicegroup' => $servicegroup,
-                                                'callId' => $callId,
-                                                'description' => $description,
-                                                'timestamp' => $timestamp,
-                                        );
-                                }
-                        }
-
-                        $totalRecords = count($recordings);
+                        $collection = $this->collectAgentRecordings($value_full, $scope, $recentCutoff, $page, $perPage);
+                        $pageRecords = $collection['records'];
+                        $totalRecords = $collection['total'];
 
                         $agentAttr = htmlspecialchars($user, ENT_QUOTES, 'UTF-8');
                         $directoryAttr = htmlspecialchars($value_full, ENT_QUOTES, 'UTF-8');
@@ -635,10 +664,11 @@ HTML;
 
                         if ($page > $totalPages) {
                                 $page = $totalPages;
+                                $collection = $this->collectAgentRecordings($value_full, $scope, $recentCutoff, $page, $perPage);
+                                $pageRecords = $collection['records'];
                         }
 
                         $offset = ($page - 1) * $perPage;
-                        $pageRecords = array_slice($recordings, $offset, $perPage);
 
                         $rangeStart = $offset + 1;
                         $rangeEnd = $offset + count($pageRecords);
