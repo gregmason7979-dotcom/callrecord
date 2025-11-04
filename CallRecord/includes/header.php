@@ -1,25 +1,57 @@
 <?php include('config.php'); ?>
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html>
+<?php
+$recordCssPath = __DIR__ . '/../css/record_style.css';
+$recordCssVersion = file_exists($recordCssPath) ? filemtime($recordCssPath) : time();
+
+$uiVersionTimestamp = $recordCssVersion;
+$uiVersionFiles = array(
+    __DIR__ . '/../index.php',
+    __DIR__ . '/functions.php',
+    __DIR__ . '/../search.php',
+    __DIR__ . '/../login.php',
+);
+
+foreach ($uiVersionFiles as $versionFile) {
+    if (!file_exists($versionFile)) {
+        continue;
+    }
+
+    $mtime = @filemtime($versionFile);
+
+    if ($mtime === false) {
+        continue;
+    }
+
+    if ($mtime > $uiVersionTimestamp) {
+        $uiVersionTimestamp = $mtime;
+    }
+}
+
+$uiVersionLabel = date('d M Y H:i', $uiVersionTimestamp);
+?>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-<title>Recorded Calls
-</title>
-<link rel="stylesheet" href="css/record_style.css">
-<link href='http://fonts.googleapis.com/css?family=Open+Sans+Condensed:300,300italic,700' rel='stylesheet' type='text/css'>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recorded Calls</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/record_style.css?v=<?php echo $recordCssVersion; ?>">
 </head>
 <body>
-  <div id="main_container">
-     <div class="container">
-	   <div class="wrapper">
-	   <div class="header_top">
-	       <div class="header_top_left">
-		     <h2>Recorded Calls</h2>
-		   </div>
-		     <div class="header_top_right">
-		      <ul>
-				<li><h2 style="color:#ced3d9;float:left;">Welcome</h2>
-				
-				<li><h2><a href="logout.php" style="color:#ced3d9;">Logout</a></h2>
-				</li>
-			  </ul>
-		   </div>
+  <div class="app-shell">
+    <header class="app-header">
+      <div class="app-header__inner">
+        <h1 class="app-header__title">Recorded Calls</h1>
+        <p class="app-header__subtitle">Review, monitor, and download conversations.</p>
+        <p class="app-header__meta">Last updated <?php echo htmlspecialchars($uiVersionLabel, ENT_QUOTES, 'UTF-8'); ?></p>
+        <nav class="app-nav" aria-label="Primary">
+          <span class="app-nav__welcome">Welcome</span>
+          <span class="app-nav__status"><span class="app-nav__status-dot" aria-hidden="true"></span>Secure Workspace</span>
+          <a class="logout-link" href="logout.php">Logout</a>
+        </nav>
+      </div>
+    </header>
+    <main class="app-main">
