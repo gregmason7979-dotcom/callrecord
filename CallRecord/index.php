@@ -78,7 +78,7 @@ $(document).ready(function(){
 
                 $targetContainer
                         .addClass('showfull--visible')
-                        .html('<div class="showfull__loading">Loading recordings...</div>');
+                        .html('<div class="showfull__loading"><span class="loading-spinner" aria-hidden="true"></span><span class="loading-text">Loading recordings...</span></div>');
 
                 $.ajax({
                         type: 'POST',
@@ -278,9 +278,17 @@ $(document).ready(function(){
         </table>
 <?php
 }else{
-	$i=0;
-	$list_full = scandir($directory); 
-	?>
+        $i=0;
+        $list_full = scandir($directory);
+        $filters = array(
+                'description' => isset($_POST['name']) ? trim($_POST['name']) : '',
+                'date_start' => (isset($_POST['date']) && $_POST['date'] !== '' && strtotime($_POST['date']) !== false) ? strtotime($_POST['date']) : null,
+                'date_end' => (isset($_POST['enddate']) && $_POST['enddate'] !== '' && strtotime($_POST['enddate'] . ' 23:59:59') !== false) ? strtotime($_POST['enddate'] . ' 23:59:59') : null,
+                'other_party' => isset($_POST['other_party']) ? trim($_POST['other_party']) : '',
+                'service_group' => isset($_POST['service_group']) ? trim($_POST['service_group']) : '',
+                'call_id' => isset($_POST['call_id']) ? trim($_POST['call_id']) : '',
+        );
+        ?>
     <table class="record-table">
 					   <tr class="table_top">
 					   <th width="300">Agent Name</th>
@@ -291,18 +299,19 @@ $(document).ready(function(){
 							<th>Description</th>
 					   </tr>
 	<?php
-	foreach($list_full as $value_full)
-	{
-		if (!in_array($value_full,array(".",".."))) 
-	 {
-		 if ($selectedAgentFilter !== '' && $selectedAgentFilter !== $value_full) {
-			 continue;
-		 }
-		 $select	=	"select first_name,last_name from dbo.cc_user where id='".ltrim($value_full,'0')."'";
-		$query	=	sqlsrv_query(connect,$select);
-		if($query==true){
-		$result	=	sqlsrv_fetch_array($query,SQLSRV_FETCH_ASSOC);
-	?>
+
+        foreach($list_full as $value_full)
+        {
+                if (!in_array($value_full,array('.', '..')))
+         {
+                 if ($selectedAgentFilter !== '' && $selectedAgentFilter !== $value_full) {
+                         continue;
+                 }
+                 $select        =       "select first_name,last_name from dbo.cc_user where id='".ltrim($value_full,'0')."'";
+                $query  =       sqlsrv_query(connect,$select);
+                if($query==true){
+                $result =       sqlsrv_fetch_array($query,SQLSRV_FETCH_ASSOC);
+        ?>
                                                <tr class="table_row table_row--agent"><td colspan="6" class="table_content">
                                                  <span class="icon-chip icon-chip--chevron" aria-hidden="true"><svg viewBox="0 0 24 24" role="presentation"><path fill="currentColor" d="m10.5 7.5 5 4.5-5 4.5a.75.75 0 0 1-1-.06.75.75 0 0 1 .06-1l3.63-3.27L9.56 8.56a.75.75 0 0 1 1-1.06Z"/></svg></span>
                                                  <span class="icon-chip icon-chip--agent" aria-hidden="true"><svg viewBox="0 0 24 24" role="presentation"><path fill="currentColor" d="M12 13.25a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm0 1.5c-3.51 0-6.5 1.92-6.5 4.5a.75.75 0 0 0 .75.75h11.5a.75.75 0 0 0 .75-.75c0-2.58-2.99-4.5-6.5-4.5Z"/></svg></span>

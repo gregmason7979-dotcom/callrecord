@@ -20,6 +20,92 @@
                 $this->recordingBaseUrl = defined('recording_base_url') ? rtrim(recording_base_url, '/\\') : '';
                 }
 
+                private function getCandidateBaseDirectories()
+                {
+                        $configured = rtrim(maindirectory, '/\\');
+                        $candidates = array();
+
+                        if ($configured !== '') {
+                                $candidates[] = $configured;
+
+                                $withSuffix = rtrim($configured . DIRECTORY_SEPARATOR . '-1', '/\\');
+
+                                if ($withSuffix !== '' && $withSuffix !== $configured) {
+                                        $candidates[] = $withSuffix;
+                                }
+
+                                $parent = rtrim(dirname($configured), '/\\');
+
+                                if ($parent !== '' && $parent !== $configured) {
+                                        $candidates[] = $parent;
+
+                                        $parentSuffix = rtrim($parent . DIRECTORY_SEPARATOR . '-1', '/\\');
+
+                                        if ($parentSuffix !== '' && $parentSuffix !== $parent) {
+                                                $candidates[] = $parentSuffix;
+                                        }
+                                }
+                        }
+
+                        $normalised = array();
+
+                        foreach ($candidates as $candidate) {
+                                $normal = preg_replace('/[\\\\\/]+/', DIRECTORY_SEPARATOR, $candidate);
+
+                                if ($normal === '' || isset($normalised[$normal])) {
+                                        continue;
+                                }
+
+                                $normalised[$normal] = $normal;
+                        }
+
+                        if (empty($normalised) && $configured !== '') {
+                                $normalised[$configured] = $configured;
+                        }
+
+                        return array_values($normalised);
+                }
+
+                private function agentDirectoryExists($directoryName)
+                {
+                        $safeDirectory = trim((string) $directoryName);
+
+                        if ($safeDirectory === '') {
+                                return false;
+                        }
+
+                        foreach ($this->getCandidateBaseDirectories() as $base) {
+                                $fullPath = $base . DIRECTORY_SEPARATOR . $safeDirectory;
+
+                                if (is_dir($fullPath)) {
+                                        return true;
+                                }
+                        }
+
+                        return false;
+                }
+
+                private function resolveAgentDirectoryLocation($directoryName)
+                {
+                        $candidates = $this->getCandidateBaseDirectories();
+                        $firstBase = isset($candidates[0]) ? $candidates[0] : rtrim(maindirectory, '/\\');
+                        $safeDirectory = trim((string) $directoryName);
+
+                        if ($safeDirectory === '') {
+                                return array('path' => '', 'base' => $firstBase);
+                        }
+
+                        foreach ($candidates as $base) {
+                                $fullPath = $base . DIRECTORY_SEPARATOR . $safeDirectory;
+
+                                if (is_dir($fullPath)) {
+                                        return array('path' => $fullPath, 'base' => $base);
+                                }
+                        }
+
+                        return array('path' => '', 'base' => $firstBase);
+                }
+
                 private function resolveDirectoryNameForId($rawId)
                 {
                         $trimmed = trim((string) $rawId);
@@ -41,7 +127,12 @@
                                 $candidates = array($padded);
 
                                 if ($padded !== $trimmed) {
-                                        $candidates[] = ltrim($trimmed, '0');
+                                        $stripped = ltrim($trimmed, '0');
+
+                                        if ($stripped !== '' && $stripped !== $padded) {
+                                                $candidates[] = $stripped;
+                                        }
+
                                         $candidates[] = $trimmed;
                                 }
 
@@ -67,6 +158,74 @@
                         }
 
                         return $trimmed;
+                }
+
+                private function normaliseRecordingTimestamp($datetime)
+                {
+                        $value = trim((string) $datetime);
+
+                        if ($value === '') {
+                                return null;
+                        }
+
+                        if (preg_match('/^\d{14}$/', $value)) {
+                                $dt = \DateTime::createFromFormat('YmdHis', $value);
+
+                                if ($dt !== false) {
+                                        return $dt->getTimestamp();
+                                }
+                        }
+
+                        $fallback = strtotime($value);
+
+                        if ($fallback === false) {
+                                return null;
+                        }
+
+                        return $fallback;
+                }
+
+                public function recordingMatchesFilters(array $meta, array $filters)
+                {
+                        $description = isset($meta['description']) ? (string) $meta['description'] : '';
+                        $datetime = isset($meta['datetime']) ? (string) $meta['datetime'] : '';
+                        $otherParty = isset($meta['other_party']) ? (string) $meta['other_party'] : '';
+                        $serviceGroup = isset($meta['service_group']) ? (string) $meta['service_group'] : '';
+                        $callId = isset($meta['call_id']) ? (string) $meta['call_id'] : '';
+
+                        if ($filters['description'] !== '' && stripos($description, $filters['description']) === false) {
+                                return false;
+                        }
+
+                        if ($filters['call_id'] !== '' && stripos($callId, $filters['call_id']) === false) {
+                                return false;
+                        }
+
+                        if ($filters['service_group'] !== '' && stripos($serviceGroup, $filters['service_group']) === false) {
+                                return false;
+                        }
+
+                        if ($filters['other_party'] !== '' && stripos($otherParty, $filters['other_party']) === false) {
+                                return false;
+                        }
+
+                        if ($filters['date_start'] !== null || $filters['date_end'] !== null) {
+                                $timestamp = $this->normaliseRecordingTimestamp($datetime);
+
+                                if ($timestamp === null) {
+                                        return false;
+                                }
+
+                                if ($filters['date_start'] !== null && $timestamp < $filters['date_start']) {
+                                        return false;
+                                }
+
+                                if ($filters['date_end'] !== null && $timestamp > $filters['date_end']) {
+                                        return false;
+                                }
+                        }
+
+                        return true;
                 }
 
                 public function getAgentRoster()
@@ -431,6 +590,15 @@
                                 $heapLimit = $perPage;
                         }
 
+                        $stats = array(
+                                'total_scanned' => 0,
+                                'skipped_non_files' => 0,
+                                'skipped_old' => 0,
+                                'skipped_malformed' => 0,
+                                'skipped_filtered' => 0,
+                                'skipped_path' => 0,
+                                'missing_timestamp' => 0,
+                        );
                         $heap = new class extends \SplMinHeap {
                                 protected function compare($value1, $value2)
                                 {
@@ -445,16 +613,23 @@
                         $totalMatches = 0;
                         $baseLength = strlen($baseDirectory) + 1;
 
-                        $iterator = new \RecursiveIteratorIterator(
-                                new \RecursiveDirectoryIterator(
-                                        $agentRoot,
-                                        \FilesystemIterator::SKIP_DOTS
-                                ),
-                                \RecursiveIteratorIterator::SELF_FIRST
-                        );
+                        try {
+                                $iterator = new \RecursiveIteratorIterator(
+                                        new \RecursiveDirectoryIterator(
+                                                $agentRoot,
+                                                \FilesystemIterator::SKIP_DOTS
+                                        ),
+                                        \RecursiveIteratorIterator::SELF_FIRST
+                                );
+                        } catch (\Throwable $exception) {
+                                return array('records' => array(), 'total' => 0);
+                        }
 
+                        try {
                         foreach ($iterator as $info) {
+                                $stats['total_scanned']++;
                                 if (!$info->isFile()) {
+                                        $stats['skipped_non_files']++;
                                         continue;
                                 }
 
@@ -462,6 +637,7 @@
                                 $timestamp = $this->extractTimestampFromFilename($filename);
 
                                 if ($timestamp === null) {
+                                        $stats['missing_timestamp']++;
                                         $fileTimestamp = @filemtime($info->getPathname());
 
                                         if ($fileTimestamp !== false) {
@@ -470,12 +646,14 @@
                                 }
 
                                 if ($scope === 'recent' && $timestamp !== null && $timestamp < $recentCutoff) {
+                                        $stats['skipped_old']++;
                                         continue;
                                 }
 
                                 $parts = explode('$', $filename);
 
                                 if (count($parts) < 5) {
+                                        $stats['skipped_malformed']++;
                                         continue;
                                 }
 
@@ -486,7 +664,16 @@
                                 $callParts = explode('.', $parts[4]);
                                 $callId = $callParts[0];
 
-                                if (!$this->recordingMatchesFilters($datetime, $description, $otherparty, $servicegroup, $callId)) {
+                                $meta = array(
+                                        'description' => $description,
+                                        'datetime' => $datetime,
+                                        'other_party' => $otherparty,
+                                        'service_group' => $servicegroup,
+                                        'call_id' => $callId,
+                                );
+
+                                if (!$this->recordingMatchesFilters($meta, $filters)) {
+                                        $stats['skipped_filtered']++;
                                         continue;
                                 }
 
@@ -501,6 +688,7 @@
                                 $segments = $this->prepareRecordingSegments($rawSegments);
 
                                 if (empty($segments)) {
+                                        $stats['skipped_path']++;
                                         continue;
                                 }
 
@@ -534,6 +722,9 @@
                                         $heap->extract();
                                         $heap->insert(array('priority' => $priority, 'record' => $record));
                                 }
+                        }
+                        } catch (\Throwable $exception) {
+                                return array('records' => array(), 'total' => 0);
                         }
 
                         $collected = array();
