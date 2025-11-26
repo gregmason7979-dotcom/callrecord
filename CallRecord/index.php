@@ -322,111 +322,175 @@ $(document).ready(function(){
                                                  <span class="table-link__chevron" aria-hidden="true"><svg viewBox="0 0 24 24" role="presentation"><path fill="currentColor" d="m9 6 6 6-6 6" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
                                                </td>
                                           </tr>
-                <?php
-                                $subdirectory   =       $directory.$value_full;
-                                if(is_dir($subdirectory))
-                                {
-                                         $list = $model->Sort_Directory_Files_By_Last_Modified($subdirectory);
-                                        foreach($list[0] as $value)
-                                         {
-                                                $play   =       $directory.$value_full.DIRECTORY_SEPARATOR.$value['file'];
-                                                if(is_dir($play))
-                                                {
-                                                        $ulist = $model->Sort_Directory_Files_By_Last_Modified($play);
-
-                                                        foreach($ulist[0] as $uval)
-                                                        {
-                                                                if(!is_file($play.DIRECTORY_SEPARATOR.$uval['file'])){
-                                                                        continue;
-                                                                }
-
-                                                                $uexplode       =       explode('$',$uval['file']);
-                                                                $uservicegroup  =       $uexplode[0];
-                                                                $udatetime              =       $uexplode[1];
-                                                                $udescription   =       $uexplode[3];
-                                                                $uotherparty    =       $uexplode[2];
-                                                                $ucallid                =       $uexplode[4];
-                                                                $ucall                  =       explode('.',$ucallid);
-
-                                                                $meta = array(
-                                                                        'description' => $udescription,
-                                                                        'datetime' => $udatetime,
-                                                                        'other_party' => $uotherparty,
-                                                                        'service_group' => $uservicegroup,
-                                                                        'call_id' => $ucall[0],
-                                                                );
-
-                                                                if ($model->recordingMatchesFilters($meta, $filters)) {
-                                                                        $i++;
-                                                                        $uuplay =       $directory.$value_full.DIRECTORY_SEPARATOR.$value['file'].DIRECTORY_SEPARATOR.$uval['file'];
-
-                                                                        if(is_file($uuplay)){
+		<?php 
+				$subdirectory	=	$directory.$value_full;
+				if(is_dir($subdirectory))
+				{
+					 $list = $model->Sort_Directory_Files_By_Last_Modified($subdirectory);
+					unset($new_array);
+					$new_array	=	array();
+					foreach($list[0] as $value)
+					 {
+						if (!in_array($value['file'],array(".",".."))) {
+						$play	=	$directory.$value_full.DIRECTORY_SEPARATOR.$value['file'];
+						if(is_dir($play))
+						{
+						unset($unew_array);
+						$unew_array	=	array();
+							$ulist = $model->Sort_Directory_Files_By_Last_Modified($play);
+							
+							foreach($ulist[0] as $uval)
+							{
+							if(is_file($play.DIRECTORY_SEPARATOR.$uval['file']))
+						{
+						$uexplode	=	explode('$',$uval['file']);
+						$uservicegroup	=	$uexplode[0];
+						$udatetime		=	$uexplode[1];
+						$udescription	=	$uexplode[3];
+						$uotherparty	=	$uexplode[2];
+						$ucallid		=	$uexplode[4];
+						$ucall			=	explode('.',$ucallid);
+						if($_POST['name']!=''){
+							if(in_array($_POST['name'],array($udescription))){ 
+								$unew_array[]	=	$uval['file'];
+							}
+						}elseif($_POST['date']!='' && $_POST['enddate']!=''){
+						$paymentDate = $udatetime;
+						$paymentDate=date('Y-m-d', strtotime($paymentDate));;
+						$contractDateBegin = $_POST['date'];
+						$contractDateEnd = $_POST['enddate'];
+						if ((strtotime($paymentDate) >= strtotime($contractDateBegin)) && (strtotime($paymentDate) <= strtotime($contractDateEnd)))
+							{
+								$unew_array[]	=	$uval['file'];
+							}
+						}elseif($_POST['other_party']!=''){
+							if(in_array($_POST['other_party'],array($uotherparty))){
+								$unew_array[]	=	$uval['file'];
+							}
+						}elseif($_POST['service_group']!=''){
+							if(in_array($_POST['service_group'],array($uservicegroup))){
+								$unew_array[]	=	$uval['file'];
+							}
+						}elseif($_POST['call_id']!=''){
+							if(in_array($_POST['call_id'],array($ucall[0]))){
+								$unew_array[]	=	$uval['file'];
+						}
+						}
+					 }
+							}
+						
+						if(is_array($unew_array))
+						{
+						
+						foreach($unew_array as $uuval)
+						{
+						$i++;
+						$uuplay	=	$directory.$value_full.DIRECTORY_SEPARATOR.$value['file'].DIRECTORY_SEPARATOR.$uuval;
+						if(is_file($uuplay)){
+						$uuexplode	=	explode('$',$uuval);
+						$uuservicegroup	=	$uuexplode[0];
+						$uudatetime		=	$uuexplode[1];
+						$uudescription	=	$uuexplode[3];
+						$uuotherparty	=	$uuexplode[2];
+						$uucallid		=	$uuexplode[4];
+						$uucall			=	explode('.',$uucallid);
                                                 ?>
                                                 <?php echo $model->renderRecordingRow(
                                                         $i,
-                                                        array($value_full, $value['file'], $uval['file']),
-                                                        $uval['file'],
-                                                        $uotherparty,
-                                                        $udatetime,
-                                                        $uservicegroup,
-                                                        $ucall[0],
-                                                        $udescription
-                                                ); ?>
-                                          <?php }
-
-                                                                }
-
-                                                         }
-
-                                                } elseif (is_file($play)) {
-
-                                                $explode        =       explode('$',$value['file']);
-                                                $servicegroup   =       $explode[0];
-                                                $datetime               =       $explode[1];
-                                                $description    =       $explode[3];
-                                                $otherparty             =       $explode[2];
-                                                $callid                 =       $explode[4];
-                                                $call                   =       explode('.',$callid);
-
-                                                $meta = array(
-                                                        'description' => $description,
-                                                        'datetime' => $datetime,
-                                                        'other_party' => $otherparty,
-                                                        'service_group' => $servicegroup,
-                                                        'call_id' => $call[0],
-                                                );
-
-                                                if ($model->recordingMatchesFilters($meta, $filters)) {
-                                                        $i++;
+                                                        array($value_full, $value['file'], $uuval),
+                                                        $uuval,
+                                                        $uuotherparty,
+                                                        $uudatetime,
+						        $uuservicegroup,
+						        $uucall[0],
+						        $uudescription
+						); ?>
+					  <?php }
+						}
+						}
+						}
+						?>
+						<?php
+						if(is_file($play))
+						{
+						$explode	=	explode('$',$value['file']);
+						$servicegroup	=	$explode[0];
+						$datetime		=	$explode[1];
+						$description	=	$explode[3];
+						$otherparty		=	$explode[2];
+						$callid			=	$explode[4];
+						$call			=	explode('.',$callid);
+						if($_POST['name']!=''){
+							if(in_array($_POST['name'],array($description))){ 
+								$new_array[]	=	$value;
+							}
+						}elseif($_POST['date']!='' && $_POST['enddate']!=''){
+						$paymentDate = $datetime;
+						$paymentDate=date('Y-m-d', strtotime($paymentDate));;
+						$contractDateBegin = $_POST['date'];
+						$contractDateEnd = $_POST['enddate'];
+						if ((strtotime($paymentDate) >= strtotime($contractDateBegin)) && (strtotime($paymentDate) <= strtotime($contractDateEnd)))
+							{
+								$new_array[]	=	$value['file'];
+							}
+						}elseif($_POST['other_party']!=''){
+							if(in_array($_POST['other_party'],array($otherparty))){
+								$new_array[]	=	$value['file'];
+							}
+						}elseif($_POST['service_group']!=''){
+							if(in_array($_POST['service_group'],array($servicegroup))){
+								$new_array[]	=	$value['file'];
+							}
+						}elseif($_POST['call_id']!=''){
+							if(in_array($_POST['call_id'],array($call[0]))){
+								$new_array[]	=	$value['file'];
+						}
+						}
+					 }
+					 }
+					}
+					if(is_array($new_array))
+					{
+					
+						foreach($new_array as $val)
+						{
+						$i++;
+						$play	=	$directory.$value_full.DIRECTORY_SEPARATOR.$val;
+						$explode	=	explode('$',$val);
+						$servicegroup	=	$explode[0];
+						$datetime		=	$explode[1];
+						$description	=	$explode[3];
+						$otherparty		=	$explode[2];
+						$callid			=	$explode[4];
+						$call			=	explode('.',$callid);
                                                 ?>
                                                 <?php echo $model->renderRecordingRow(
                                                         $i,
-                                                        array($value_full, $value['file']),
-                                                        $value['file'],
+                                                        array($value_full, $val),
+                                                        $val,
                                                         $otherparty,
                                                         $datetime,
-                                                        $servicegroup,
-                                                        $call[0],
-                                                        $description
-                                                ); ?>
-                                          <?php }
-
-                                         }
-
-                                         }
-
-                                  }
-                                }
-                        }
-                }
-        ?>
-    </table>
-
-<?php } ?>
-<div class="content_end">
-</div>
-                         </div>
-                  </div>
-           </div>
-
-<?php include('includes/footer.php'); ?>
+						        $servicegroup,
+						        $call[0],
+						        $description
+						); ?>
+					  <?php } } }
+					   } 
+					   ?>
+					   
+					   
+					   <?php } }?>
+					  
+					  
+					  
+					   
+					</table>
+					
+					<?php } ?>
+					<div class="content_end"> 
+					</div>
+				 </div>
+			  </div>
+		   </div>
+		 
+<?php include('includes/footer.php'); ?> 

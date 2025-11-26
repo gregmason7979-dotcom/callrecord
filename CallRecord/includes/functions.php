@@ -6,13 +6,13 @@
 
 		function __construct()
 		{
-                        $serverName = "GNT-SEC";
+			$serverName = "GNT-SEC";
 			$connectionInfo = array( "Database"=>dbname, "UID"=>username, "PWD"=>password);
 			$connect	=	sqlsrv_connect( $serverName, $connectionInfo);
-
-                        if(!$connect)
-                        {
-                                die('Could Not Connect!');
+			
+			if(!$connect)
+			{
+				die('Could Not Connect!');
 				/* die( print_r( sqlsrv_errors(), true)); */
 			}
 		/* 	mssql_select_db(dbname,$connect) ; */
@@ -114,6 +114,8 @@
                                 return '';
                         }
 
+                        $baseDirectory = rtrim(maindirectory, '/\\');
+
                         if (preg_match('/^-?\d+$/', $trimmed)) {
                                 $numericId = (int) $trimmed;
 
@@ -139,7 +141,9 @@
                                                 continue;
                                         }
 
-                                        if ($this->agentDirectoryExists($candidate)) {
+                                        $fullPath = $baseDirectory . DIRECTORY_SEPARATOR . $candidate;
+
+                                        if (is_dir($fullPath)) {
                                                 return $candidate;
                                         }
                                 }
@@ -147,7 +151,9 @@
                                 return $padded;
                         }
 
-                        if ($this->agentDirectoryExists($trimmed)) {
+                        $fullPath = $baseDirectory . DIRECTORY_SEPARATOR . $trimmed;
+
+                        if (is_dir($fullPath)) {
                                 return $trimmed;
                         }
 
@@ -533,22 +539,42 @@
 
                 return array($array, $sort_type);
         }
+                private function recordingMatchesFilters($datetime, $description, $otherparty, $servicegroup, $callId)
+                {
+                        if (!isset($_POST['action']) || $_POST['action'] !== 'getdirectory') {
+                                return true;
+                        }
+
+                        if (!empty($_POST['name'])) {
+                                return $_POST['name'] === $description;
+                        }
+
+                        if (!empty($_POST['date']) && !empty($_POST['enddate'])) {
+                                $paymentDate = date('Y-m-d', strtotime($datetime));
+                                return (strtotime($paymentDate) >= strtotime($_POST['date'])) && (strtotime($paymentDate) <= strtotime($_POST['enddate']));
+                        }
+
+                        if (!empty($_POST['other_party'])) {
+                                return $_POST['other_party'] === $otherparty;
+                        }
+
+                        if (!empty($_POST['service_group'])) {
+                                return $_POST['service_group'] === $servicegroup;
+                        }
+
+                        if (!empty($_POST['call_id'])) {
+                                return $_POST['call_id'] === $callId;
+                        }
+
+                        return true;
+                }
+
                 private function collectAgentRecordings($directoryName, $scope, $recentCutoff, $page, $perPage)
                 {
-                        $location = $this->resolveAgentDirectoryLocation($directoryName);
+                        $baseDirectory = rtrim(maindirectory, '/\\');
+                        $agentRoot = $baseDirectory . DIRECTORY_SEPARATOR . $directoryName;
 
-                        $filters = array(
-                                'description' => (isset($_POST['name']) && isset($_POST['action']) && $_POST['action'] === 'getdirectory') ? trim((string) $_POST['name']) : '',
-                                'date_start' => (isset($_POST['date']) && isset($_POST['action']) && $_POST['action'] === 'getdirectory' && $_POST['date'] !== '' && strtotime($_POST['date']) !== false) ? strtotime($_POST['date']) : null,
-                                'date_end' => (isset($_POST['enddate']) && isset($_POST['action']) && $_POST['action'] === 'getdirectory' && $_POST['enddate'] !== '' && strtotime($_POST['enddate']) !== false) ? strtotime($_POST['enddate'] . ' 23:59:59') : null,
-                                'other_party' => (isset($_POST['other_party']) && isset($_POST['action']) && $_POST['action'] === 'getdirectory') ? trim((string) $_POST['other_party']) : '',
-                                'service_group' => (isset($_POST['service_group']) && isset($_POST['action']) && $_POST['action'] === 'getdirectory') ? trim((string) $_POST['service_group']) : '',
-                                'call_id' => (isset($_POST['call_id']) && isset($_POST['action']) && $_POST['action'] === 'getdirectory') ? trim((string) $_POST['call_id']) : '',
-                        );
-                        $agentRoot = $location['path'];
-                        $baseDirectory = isset($location['base']) ? $location['base'] : rtrim(maindirectory, '/\\');
-
-                        if ($agentRoot === '' || !is_dir($agentRoot)) {
+                        if (!is_dir($agentRoot)) {
                                 return array('records' => array(), 'total' => 0);
                         }
 
